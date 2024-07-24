@@ -132,7 +132,7 @@ const std::vector<uint16_t> indices = {
     4, 5, 6, 6, 7, 4
 };
 
-class HelloTriangleApplication {
+class DepthApplication {
 public:
     void run() {
         initWindow();
@@ -170,7 +170,8 @@ private:
 
     VkImage depthImage;
     VkDeviceMemory depthImageMemory;
-    VkImageView depthImageView;
+    VkImageView depthImageView; 
+    VkFormat depthFormat;
 
     VkImage textureImage;
     VkDeviceMemory textureImageMemory;
@@ -209,7 +210,7 @@ private:
     }
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-        auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+        auto app = reinterpret_cast<DepthApplication*>(glfwGetWindowUserPointer(window));
         app->framebufferResized = true;
     }
 
@@ -243,6 +244,10 @@ private:
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
             drawFrame();
+
+            // Insert your code to get and print the depth value here
+            float depthValue = getDepthValueAtCoord(4, 3);
+            std::cout << "Depth value at (100, 100): " << depthValue << "\n\n\n\n";
         }
 
         vkDeviceWaitIdle(device);
@@ -770,8 +775,9 @@ private:
         }
     }
 
+    //Depth
     void createDepthResources() {
-        VkFormat depthFormat = findDepthFormat();
+        depthFormat = findDepthFormat();
 
         createImage(swapChainExtent.width, swapChainExtent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
         depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
@@ -805,6 +811,69 @@ private:
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
 
+    void copyDepthBufferToStagingBuffer(VkBuffer stagingBuffer, VkImage depthImage) {
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+        VkBufferImageCopy region{};
+        region.bufferOffset = 0;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageOffset = { 0, 0, 0 };
+        region.imageExtent = { swapChainExtent.width, swapChainExtent.height, 1 };
+
+        vkCmdCopyImageToBuffer(commandBuffer, depthImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, stagingBuffer, 1, &region);
+
+        endSingleTimeCommands(commandBuffer);
+    }
+
+    float getDepthValueAtCoord(int x, int y) {
+        VkDeviceSize bufferSize = swapChainExtent.width * swapChainExtent.height * sizeof(float);
+
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+        copyImageToBuffer(depthImage, stagingBuffer, swapChainExtent.width, swapChainExtent.height, depthFormat);
+
+        void* data;
+        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+
+        float depthValue = reinterpret_cast<float*>(data)[y * swapChainExtent.width + x];
+        vkUnmapMemory(device, stagingBufferMemory);
+
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingBufferMemory, nullptr);
+
+        return depthValue;
+    }
+
+    void copyImageToBuffer(VkImage image, VkBuffer buffer, uint32_t width, uint32_t height, VkFormat format) {
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+        VkImageSubresourceLayers subresource = {};
+        subresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        subresource.mipLevel = 0;
+        subresource.baseArrayLayer = 0;
+        subresource.layerCount = 1;
+
+        VkBufferImageCopy region = {};
+        region.bufferOffset = 0;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource = subresource;
+        region.imageOffset = { 0, 0, 0 };
+        region.imageExtent = { width, height, 1 };
+
+        vkCmdCopyImageToBuffer(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer, 1, &region);
+
+        endSingleTimeCommands(commandBuffer);
+    }
+
+    //Texture
     void createTextureImage() {
         int texWidth, texHeight, texChannels;
         stbi_uc* pixels = stbi_load("textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -1571,7 +1640,7 @@ private:
 };
 
 int main() {
-    HelloTriangleApplication app;
+    DepthApplication app;
 
     try {
         app.run();
