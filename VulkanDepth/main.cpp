@@ -116,21 +116,82 @@ struct UniformBufferObject {
 };
 
 const std::vector<Vertex> vertices = {
+    //Quad1
     {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
     {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
     {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
     {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
 
-    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+
+    //Quad2
+    {{-0.5f, -0.5f, -0.8f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, -0.5f, -0.8f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, 0.5f, -0.8f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-0.5f, 0.5f, -0.8f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
 };
 
 const std::vector<uint16_t> indices = {
-    0, 1, 2, 2, 3, 0,
-    4, 5, 6, 6, 7, 4
+    0, 1, 2, 2, 3, 0, //Quad1
+    4, 5, 6, 6, 7, 4  //Quad2
 };
+
+bool isPointOccludedByTriangle(
+    const glm::vec3& point, const glm::mat4& modelMatrix, 
+    const glm::mat4& viewMatrix, const glm::mat4& projMatrix,
+    const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2) {
+
+    // Transform point and triangle vertices to world space
+    glm::vec4 worldSpacePoint = modelMatrix * glm::vec4(point, 1.0f);
+    glm::vec4 worldSpaceV0 = modelMatrix * glm::vec4(v0, 1.0f);
+    glm::vec4 worldSpaceV1 = modelMatrix * glm::vec4(v1, 1.0f);
+    glm::vec4 worldSpaceV2 = modelMatrix * glm::vec4(v2, 1.0f);
+
+    // Compute triangle normal in world space
+    glm::vec3 edge1 = glm::vec3(worldSpaceV1) - glm::vec3(worldSpaceV0);
+    glm::vec3 edge2 = glm::vec3(worldSpaceV2) - glm::vec3(worldSpaceV0);
+    glm::vec3 triangleNormal = glm::normalize(glm::cross(edge1, edge2));
+
+    // Check if point is in front of or behind the triangle plane
+    float distance = glm::dot(triangleNormal, glm::vec3(worldSpacePoint) - glm::vec3(worldSpaceV0));
+
+    if (distance > 0) {
+        return false;
+    }
+
+    // Project the point and triangle vertices to clip space
+    glm::vec4 clipSpacePoint = projMatrix * viewMatrix * worldSpacePoint;
+    glm::vec4 clipSpaceV0 = projMatrix * viewMatrix * worldSpaceV0;
+    glm::vec4 clipSpaceV1 = projMatrix * viewMatrix * worldSpaceV1;
+    glm::vec4 clipSpaceV2 = projMatrix * viewMatrix * worldSpaceV2;
+
+    // Perspective divide to get NDC coordinates
+    glm::vec3 ndcPoint = glm::vec3(clipSpacePoint) / clipSpacePoint.w;
+    glm::vec3 ndcV0 = glm::vec3(clipSpaceV0) / clipSpaceV0.w;
+    glm::vec3 ndcV1 = glm::vec3(clipSpaceV1) / clipSpaceV1.w;
+    glm::vec3 ndcV2 = glm::vec3(clipSpaceV2) / clipSpaceV2.w;
+
+    // Check if the point is within the triangle in NDC space
+    auto IsPointInTriangle = [](const glm::vec3& pt, const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2) {
+        glm::vec3 u = v1 - v0;
+        glm::vec3 v = v2 - v0;
+        glm::vec3 w = pt - v0;
+
+        float uu = glm::dot(u, u);
+        float uv = glm::dot(u, v);
+        float vv = glm::dot(v, v);
+        float wu = glm::dot(w, u);
+        float wv = glm::dot(w, v);
+
+        float denominator = uv * uv - uu * vv;
+
+        float s = (uv * wv - vv * wu) / denominator;
+        float t = (uv * wu - uu * wv) / denominator;
+
+        return (s >= 0.0f) && (t >= 0.0f) && (s + t <= 1.0f);
+    };
+
+    return IsPointInTriangle(ndcPoint, ndcV0, ndcV1, ndcV2);
+}
 
 class DepthApplication {
 public:
@@ -241,13 +302,10 @@ private:
     }
 
     void mainLoop() {
+        testSceneOccluded();
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
             drawFrame();
-
-            // Insert your code to get and print the depth value here
-            float depthValue = getDepthValueAtCoord(4, 3);
-            std::cout << "Depth value at (100, 100): " << depthValue << "\n\n\n\n";
         }
 
         vkDeviceWaitIdle(device);
@@ -574,7 +632,7 @@ private:
         dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-        std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
+        std::array<VkAttachmentDescription, 2> attachments = {colorAttachment, depthAttachment };
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -777,9 +835,12 @@ private:
 
     //Depth
     void createDepthResources() {
-        depthFormat = findDepthFormat();
-
-        createImage(swapChainExtent.width, swapChainExtent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
+        VkFormat depthFormat = findDepthFormat();
+        createImage(swapChainExtent.width, swapChainExtent.height, depthFormat,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            depthImage, depthImageMemory);
         depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
     }
 
@@ -830,25 +891,41 @@ private:
         endSingleTimeCommands(commandBuffer);
     }
 
-    float getDepthValueAtCoord(int x, int y) {
-        VkDeviceSize bufferSize = swapChainExtent.width * swapChainExtent.height * sizeof(float);
+    void getDepthValueAtCoord(VkCommandBuffer commandBuffer, VkImage depthImage, VkFormat depthFormat, int x, int y, float* depthValue) {
+        // Ensure depth image is in transfer source layout
+        transitionImageLayout(depthImage, depthFormat, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        // Create a buffer to copy the depth data into
+        VkBuffer depthBuffer;
+        VkDeviceMemory depthBufferMemory;
+        createBuffer(sizeof(float), VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, depthBuffer, depthBufferMemory);
 
-        copyImageToBuffer(depthImage, stagingBuffer, swapChainExtent.width, swapChainExtent.height, depthFormat);
+        // Copy the depth value at the specified coordinate
+        VkBufferImageCopy region{};
+        region.bufferOffset = 0;
+        region.bufferRowLength = swapChainExtent.width;
+        region.bufferImageHeight = swapChainExtent.height;
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageOffset = { x, y, 0 };
+        region.imageExtent = { 1, 1, 1 };
 
+        vkCmdCopyImageToBuffer(commandBuffer, depthImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, depthBuffer, 1, &region);
+
+        // Map the buffer memory and read the depth value
         void* data;
-        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        vkMapMemory(device, depthBufferMemory, 0, sizeof(float), 0, &data);
+        *depthValue = *reinterpret_cast<float*>(data);
+        vkUnmapMemory(device, depthBufferMemory);
 
-        float depthValue = reinterpret_cast<float*>(data)[y * swapChainExtent.width + x];
-        vkUnmapMemory(device, stagingBufferMemory);
+        // Clean up the buffer
+        vkDestroyBuffer(device, depthBuffer, nullptr);
+        vkFreeMemory(device, depthBufferMemory, nullptr);
 
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        vkFreeMemory(device, stagingBufferMemory, nullptr);
-
-        return depthValue;
+        // Transition depth image back to its original layout
+        transitionImageLayout(depthImage, depthFormat, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
     }
 
     void copyImageToBuffer(VkImage image, VkBuffer buffer, uint32_t width, uint32_t height, VkFormat format) {
@@ -997,16 +1074,47 @@ private:
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = image;
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount = 1;
         barrier.subresourceRange.baseArrayLayer = 0;
         barrier.subresourceRange.layerCount = 1;
 
+        // Determine the aspect mask based on format and new layout
+        if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            if (hasStencilComponent(format)) {
+                barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+            }
+        }
+        else {
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        }
+
         VkPipelineStageFlags sourceStage;
         VkPipelineStageFlags destinationStage;
 
-        if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+            barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
             barrier.srcAccessMask = 0;
             barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 
@@ -1021,6 +1129,7 @@ private:
             destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
         }
         else {
+            std::cerr << "Unsupported layout transition! Old Layout: " << oldLayout << " New Layout: " << newLayout << std::endl;
             throw std::invalid_argument("unsupported layout transition!");
         }
 
@@ -1043,7 +1152,7 @@ private:
         region.bufferOffset = 0;
         region.bufferRowLength = 0;
         region.bufferImageHeight = 0;
-        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         region.imageSubresource.mipLevel = 0;
         region.imageSubresource.baseArrayLayer = 0;
         region.imageSubresource.layerCount = 1;
@@ -1358,12 +1467,46 @@ private:
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
         UniformBufferObject ubo{};
-        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo = initUbo(ubo);
+
+        memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+    }
+
+    UniformBufferObject initUbo(UniformBufferObject ubo) {
+        ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
         ubo.proj[1][1] *= -1;
+        return ubo;
+    }
 
-        memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+    void testSceneOccluded() {
+        UniformBufferObject ubo{};
+        ubo = initUbo(ubo);
+
+        for (size_t i = 0; i < vertices.size(); ++i) {
+            glm::vec3 point = vertices[i].pos;
+            for (size_t j = 0; j < indices.size(); j += 3) {
+                int id0 = indices[j];
+                int id1 = indices[j + 1];
+                int id2 = indices[j + 2];
+
+                if (i != id0 && i != id1 && i != id2) {
+                    glm::vec3 v0 = vertices[id0].pos;
+                    glm::vec3 v1 = vertices[id1].pos;
+                    glm::vec3 v2 = vertices[id2].pos;
+
+                    bool isOccluded = isPointOccludedByTriangle(point, ubo.model, ubo.view, ubo.proj, v0, v1, v2);
+
+                    if (isOccluded) {
+                        std::cout << "Point " << i << " is occluded by triangle (" << id0 << ", " << id1 << ", " << id2 << ")." << std::endl;
+                    }
+                    else {
+                        std::cout << "Point " << i << " is NOT occluded by triangle (" << id0 << ", " << id1 << ", " << id2 << ")." << std::endl;
+                    }
+                }
+            }
+        }
     }
 
     void drawFrame() {
@@ -1387,6 +1530,13 @@ private:
         vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
         recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
+        // Call getDepthValueAtCoord here
+        //float depthValue;
+        //int x = 0; // Example X coordinate
+        //int y = 0; // Example Y coordinate
+        //getDepthValueAtCoord(commandBuffers[currentFrame], depthImage, findDepthFormat(), x, y, &depthValue);
+        //std::cout << "\n\nDepth Value at (" << x << ", " << y << "): " << depthValue << "\n\n";
+
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
@@ -1409,14 +1559,12 @@ private:
 
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-
         presentInfo.waitSemaphoreCount = 1;
         presentInfo.pWaitSemaphores = signalSemaphores;
 
         VkSwapchainKHR swapChains[] = { swapChain };
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = swapChains;
-
         presentInfo.pImageIndices = &imageIndex;
 
         result = vkQueuePresentKHR(presentQueue, &presentInfo);
