@@ -9,11 +9,13 @@
 #include <stb_image.h>
 
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 #include <stdexcept>
 #include <algorithm>
 #include <chrono>
 #include <vector>
+#include <cmath>
 #include <cstring>
 #include <cstdlib>
 #include <cstdint>
@@ -115,25 +117,129 @@ struct UniformBufferObject {
     alignas(16) glm::mat4 proj;
 };
 
+//const std::vector<Vertex> vertices = {
+//    //Quad1
+//    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+//    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+//    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+//    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+//
+//
+//    //Quad2
+//    {{-0.5f, -0.5f, -0.8f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+//    {{0.5f, -0.5f, -0.8f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+//    {{0.5f, 0.5f, -0.8f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+//    {{-0.5f, 0.5f, -0.8f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+//};
+//
+//const std::vector<uint16_t> indices = {
+//    0, 1, 2, 2, 3, 0, //Quad1
+//    4, 5, 6, 6, 7, 4  //Quad2
+//};
+
 const std::vector<Vertex> vertices = {
-    //Quad1
-    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+    // Quad 1
+    {{-0.5f, -0.5f, 0.4f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{ 0.5f, -0.5f, 0.4f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{ 0.5f,  0.5f, 0.4f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-0.5f,  0.5f, 0.4f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
 
+    // Quad 2 (shifted along X axis)
+    {{ 0.6f, -0.5f, -0.2f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{ 1.6f, -0.5f, -0.2f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{ 1.6f,  0.5f, -0.2f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{ 0.6f,  0.5f, -0.2f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
 
-    //Quad2
-    {{-0.5f, -0.5f, -0.8f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, -0.5f, -0.8f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, 0.5f, -0.8f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{-0.5f, 0.5f, -0.8f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+    // Quad 3 (shifted along Y axis)
+    {{-0.5f,  0.6f, -0.8f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{ 0.5f,  0.6f, -0.8f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{ 0.5f,  1.6f, -0.8f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-0.5f,  1.6f, -0.8f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+
+    // Quad 4 (shifted along Z axis)
+    {{-0.5f, -0.5f, -1.8f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{ 0.5f, -0.5f, -1.8f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{ 0.5f,  0.5f, -1.8f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-0.5f,  0.5f, -1.8f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
 };
 
 const std::vector<uint16_t> indices = {
-    0, 1, 2, 2, 3, 0, //Quad1
-    4, 5, 6, 6, 7, 4  //Quad2
+    // Quad 1
+    0, 1, 2, 2, 3, 0,
+
+    // Quad 2
+    4, 5, 6, 6, 7, 4,
+
+    // Quad 3
+    8, 9, 10, 10, 11, 8,
+
+    // Quad 4
+    12, 13, 14, 14, 15, 12
 };
+
+//const std::vector<Vertex> vertices = {
+//    // Triangle spanning from near to far plane
+//    {{ 0.0f,  0.5f,  0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}}, // Near plane (z = 0.0f)
+//    {{-0.5f, -0.5f,  1.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}}, // Far plane (z = 1.0f)
+//    {{ 0.5f, -0.5f,  1.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}} // Far plane (z = 1.0f)
+//};
+//
+//const std::vector<uint16_t> indices = {
+//    0, 1, 2
+//};
+
+//const std::vector<Vertex> vertices = {
+//    // Front face
+//    {{-0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+//    {{ 0.5f, -0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+//    {{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+//    {{-0.5f,  0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
+//
+//    // Back face
+//    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+//    {{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+//    {{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+//    {{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+//
+//    // Left face
+//    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+//    {{-0.5f, -0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+//    {{-0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+//    {{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
+//
+//    // Right face
+//    {{ 0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+//    {{ 0.5f, -0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+//    {{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+//    {{ 0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+//
+//    // Top face
+//    {{-0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
+//    {{-0.5f,  0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+//    {{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
+//    {{ 0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+//
+//    // Bottom face
+//    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
+//    {{-0.5f, -0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+//    {{ 0.5f, -0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
+//    {{ 0.5f, -0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+//};
+//
+//const std::vector<uint16_t> indices = {
+//    // Front face
+//    0, 1, 2, 2, 3, 0,
+//    // Back face
+//    4, 5, 6, 6, 7, 4,
+//    // Left face
+//    8, 9, 10, 10, 11, 8,
+//    // Right face
+//    12, 13, 14, 14, 15, 12,
+//    // Top face
+//    16, 17, 18, 18, 19, 16,
+//    // Bottom face
+//    20, 21, 22, 22, 23, 20
+//};
 
 bool isPointOccludedByTriangle(
     const glm::vec3& point, const glm::mat4& modelMatrix, 
@@ -243,6 +349,9 @@ private:
     VkDeviceMemory vertexBufferMemory;
     VkBuffer indexBuffer;
     VkDeviceMemory indexBufferMemory;
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    bool depthBufferCopied = false;
 
     std::vector<VkBuffer> uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
@@ -294,6 +403,7 @@ private:
         createTextureSampler();
         createVertexBuffer();
         createIndexBuffer();
+        createStagingBuffer();
         createUniformBuffers();
         createDescriptorPool();
         createDescriptorSets();
@@ -307,7 +417,7 @@ private:
             glfwPollEvents();
             drawFrame();
         }
-
+        //testPointDepth();
         vkDeviceWaitIdle(device);
     }
 
@@ -354,6 +464,8 @@ private:
 
         vkDestroyBuffer(device, vertexBuffer, nullptr);
         vkFreeMemory(device, vertexBufferMemory, nullptr);
+
+        cleanupStagingBuffer();
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
@@ -604,7 +716,7 @@ private:
         depthAttachment.format = findDepthFormat();
         depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
         depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -825,7 +937,7 @@ private:
 
         VkCommandPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
         poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
 
         if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
@@ -834,6 +946,41 @@ private:
     }
 
     //Depth
+    void createStagingBuffer(){
+        VkDeviceSize bufferSize = swapChainExtent.width * swapChainExtent.height * sizeof(float);
+
+        VkBufferCreateInfo bufferInfo = {};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.size = bufferSize;
+        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        if (vkCreateBuffer(device, &bufferInfo, nullptr, &stagingBuffer) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create staging buffer!");
+        }
+
+        VkMemoryRequirements memRequirements;
+        vkGetBufferMemoryRequirements(device, stagingBuffer, &memRequirements);
+
+        VkMemoryAllocateInfo allocInfo = {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = memRequirements.size;
+        allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+        if (vkAllocateMemory(device, &allocInfo, nullptr, &stagingBufferMemory) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate staging buffer memory!");
+        }
+
+        vkBindBufferMemory(device, stagingBuffer, stagingBufferMemory, 0);
+    }
+
+    void cleanupStagingBuffer() {
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingBufferMemory, nullptr);
+    }
+
     void createDepthResources() {
         VkFormat depthFormat = findDepthFormat();
         createImage(swapChainExtent.width, swapChainExtent.height, depthFormat,
@@ -842,6 +989,8 @@ private:
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             depthImage, depthImageMemory);
         depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+
+        transitionImageLayout(depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
     }
 
     VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
@@ -862,7 +1011,8 @@ private:
 
     VkFormat findDepthFormat() {
         return findSupportedFormat(
-            { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+            { VK_FORMAT_D32_SFLOAT },
+            //{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
             VK_IMAGE_TILING_OPTIMAL,
             VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
         );
@@ -872,9 +1022,37 @@ private:
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
 
-    void copyDepthBufferToStagingBuffer(VkBuffer stagingBuffer, VkImage depthImage) {
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+    void copyDepthBufferToStagingBuffer() {
+        // Create a fence to ensure that the GPU has finished before we proceed
+        VkFence copyFence;
+        VkFenceCreateInfo fenceInfo{};
+        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fenceInfo.flags = 0;
 
+        if (vkCreateFence(device, &fenceInfo, nullptr, &copyFence) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create fence!");
+        }
+
+        // Manually allocate a command buffer for this operation
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandPool = commandPool;
+        allocInfo.commandBufferCount = 1;
+
+        VkCommandBuffer commandBuffer;
+        vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+        vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+        // Transition the depth image layout to transfer src
+        transitionImageLayout(depthImage, VK_FORMAT_D32_SFLOAT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+        // Copy the depth image to the staging buffer
         VkBufferImageCopy region{};
         region.bufferOffset = 0;
         region.bufferRowLength = 0;
@@ -888,44 +1066,48 @@ private:
 
         vkCmdCopyImageToBuffer(commandBuffer, depthImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, stagingBuffer, 1, &region);
 
-        endSingleTimeCommands(commandBuffer);
+        // Transition the depth image layout back to its original layout
+        transitionImageLayout(depthImage, VK_FORMAT_D32_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+        vkEndCommandBuffer(commandBuffer);
+
+        // Submit the command buffer and wait for the fence
+        VkSubmitInfo submitInfo{};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBuffer;
+
+        if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, copyFence) != VK_SUCCESS) {
+            throw std::runtime_error("failed to submit copy command buffer!");
+        }
+
+        // Wait for the fence to signal that the operations are complete
+        vkWaitForFences(device, 1, &copyFence, VK_TRUE, UINT64_MAX);
+
+        // Cleanup
+        vkDestroyFence(device, copyFence, nullptr);
+        vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     }
 
-    void getDepthValueAtCoord(VkCommandBuffer commandBuffer, VkImage depthImage, VkFormat depthFormat, int x, int y, float* depthValue) {
-        // Ensure depth image is in transfer source layout
-        transitionImageLayout(depthImage, depthFormat, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-
-        // Create a buffer to copy the depth data into
-        VkBuffer depthBuffer;
-        VkDeviceMemory depthBufferMemory;
-        createBuffer(sizeof(float), VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, depthBuffer, depthBufferMemory);
-
-        // Copy the depth value at the specified coordinate
-        VkBufferImageCopy region{};
-        region.bufferOffset = 0;
-        region.bufferRowLength = swapChainExtent.width;
-        region.bufferImageHeight = swapChainExtent.height;
-        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        region.imageSubresource.mipLevel = 0;
-        region.imageSubresource.baseArrayLayer = 0;
-        region.imageSubresource.layerCount = 1;
-        region.imageOffset = { x, y, 0 };
-        region.imageExtent = { 1, 1, 1 };
-
-        vkCmdCopyImageToBuffer(commandBuffer, depthImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, depthBuffer, 1, &region);
-
-        // Map the buffer memory and read the depth value
+    float getDepthValueAtCoord(int x, int y) {
         void* data;
-        vkMapMemory(device, depthBufferMemory, 0, sizeof(float), 0, &data);
-        *depthValue = *reinterpret_cast<float*>(data);
-        vkUnmapMemory(device, depthBufferMemory);
+        vkMapMemory(device, stagingBufferMemory, 0, VK_WHOLE_SIZE, 0, &data);
+        float* depthValues = static_cast<float*>(data);
 
-        // Clean up the buffer
-        vkDestroyBuffer(device, depthBuffer, nullptr);
-        vkFreeMemory(device, depthBufferMemory, nullptr);
-
-        // Transition depth image back to its original layout
-        transitionImageLayout(depthImage, depthFormat, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        // Ensure x and y are within bounds
+        if (x >= 0 && x < swapChainExtent.width && y >= 0 && y < swapChainExtent.height) {
+            int index = y * swapChainExtent.width + x;
+            float depthValue = depthValues[index];
+            vkUnmapMemory(device, stagingBufferMemory);
+            for (int i = 0; i < 200; i++) {
+                std::cout << depthValues[rand() % 600] << "\n";
+            }
+            return depthValue;
+        }
+        else {
+            vkUnmapMemory(device, stagingBufferMemory);
+            return -1.0f; // Return an error value or handle this appropriately
+        }
     }
 
     void copyImageToBuffer(VkImage image, VkBuffer buffer, uint32_t width, uint32_t height, VkFormat format) {
@@ -1074,21 +1256,24 @@ private:
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = image;
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
 
-        // Determine the aspect mask based on format and new layout
-        if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+        if (format == VK_FORMAT_D32_SFLOAT || format == VK_FORMAT_D16_UNORM || format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT) {
             barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-            if (hasStencilComponent(format)) {
+            if (format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT) {
                 barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
             }
         }
         else {
             barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         }
+
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
 
         VkPipelineStageFlags sourceStage;
         VkPipelineStageFlags destinationStage;
@@ -1477,12 +1662,22 @@ private:
         ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
         ubo.proj[1][1] *= -1;
+
+        float scaleFactor = 1.0f;  // Example scale factor
+        glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(scaleFactor, scaleFactor, scaleFactor));
+
+        // Apply scaling to the view matrix
+        ubo.view = scaleMatrix * ubo.view;
+
         return ubo;
     }
 
     void testSceneOccluded() {
         UniformBufferObject ubo{};
         ubo = initUbo(ubo);
+        int count = 0;
+
+        auto start = std::chrono::high_resolution_clock::now();
 
         for (size_t i = 0; i < vertices.size(); ++i) {
             glm::vec3 point = vertices[i].pos;
@@ -1499,14 +1694,19 @@ private:
                     bool isOccluded = isPointOccludedByTriangle(point, ubo.model, ubo.view, ubo.proj, v0, v1, v2);
 
                     if (isOccluded) {
-                        std::cout << "Point " << i << " is occluded by triangle (" << id0 << ", " << id1 << ", " << id2 << ")." << std::endl;
+                        std::cout << "Point " << i << " is occluded by triangle (" << id0 << ", " << id1 << ", " << id2 << ")." << "\n";
                     }
                     else {
-                        std::cout << "Point " << i << " is NOT occluded by triangle (" << id0 << ", " << id1 << ", " << id2 << ")." << std::endl;
+                        std::cout << "Point " << i << " is NOT occluded by triangle (" << id0 << ", " << id1 << ", " << id2 << ")." << "\n";
                     }
+                    count++;
                 }
             }
         }
+
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = end - start;
+        std::cout << "Execution time: " << elapsed.count() << " seconds, with " << count << " tests." << "\n";
     }
 
     void drawFrame() {
@@ -1529,13 +1729,6 @@ private:
 
         vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
         recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
-
-        // Call getDepthValueAtCoord here
-        //float depthValue;
-        //int x = 0; // Example X coordinate
-        //int y = 0; // Example Y coordinate
-        //getDepthValueAtCoord(commandBuffers[currentFrame], depthImage, findDepthFormat(), x, y, &depthValue);
-        //std::cout << "\n\nDepth Value at (" << x << ", " << y << "): " << depthValue << "\n\n";
 
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1567,6 +1760,13 @@ private:
         presentInfo.pSwapchains = swapChains;
         presentInfo.pImageIndices = &imageIndex;
 
+
+        /*if (!depthBufferCopied) {
+            copyDepthBufferToStagingBuffer();
+            depthBufferCopied = true;
+        }*/
+        testPointDepth();
+
         result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
@@ -1577,7 +1777,40 @@ private:
             throw std::runtime_error("failed to present swap chain image!");
         }
 
+        vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+
+        if (!depthBufferCopied) {
+            copyDepthBufferToStagingBuffer();
+            depthBufferCopied = true;
+        }
+        testPointDepth();
+
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+    }
+
+    void testPointDepth() {
+        // Wait for rendering to complete before proceeding =================
+        vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+        //==================================
+        UniformBufferObject ubo{};
+        ubo = initUbo(ubo);
+
+        glm::vec3 vertex = vertices[0].pos; // 'someIndex' should be defined based on your needs
+
+        // Transform the vertex position into clip space (as shown previously)
+        glm::vec4 vertexPos = glm::vec4(vertex, 1.0f);
+        glm::vec4 clipSpacePos = ubo.proj * ubo.view * ubo.model * vertexPos;
+
+        // Perform perspective divide to get NDC
+        glm::vec3 ndc = glm::vec3(clipSpacePos) / clipSpacePos.w;
+
+        // Convert NDC to screen coordinates
+        int x = static_cast<int>((ndc.x * 0.5f + 0.5f) * swapChainExtent.width);
+        int y = static_cast<int>((ndc.y * 0.5f + 0.5f) * swapChainExtent.height);
+
+        // Fetch the depth value at this screen position
+        float depthValue = getDepthValueAtCoord(x, y);
+        std::cout << std::fixed << std::setprecision(6) << "\nDepth Value at vertex (" << vertex.x << ", " << vertex.y << ", " << vertex.z << ") is: " << depthValue << "\n\n";
     }
 
     VkShaderModule createShaderModule(const std::vector<char>& code) {
