@@ -715,7 +715,7 @@ private:
         VkAttachmentDescription depthAttachment{};
         depthAttachment.format = findDepthFormat();
         depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; //verify
         depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -947,7 +947,7 @@ private:
 
     //Depth
     void createStagingBuffer(){
-        VkDeviceSize bufferSize = swapChainExtent.width * swapChainExtent.height * sizeof(float);
+        VkDeviceSize bufferSize = swapChainExtent.width * swapChainExtent.height * sizeof(float); //verify
 
         VkBufferCreateInfo bufferInfo = {};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1090,18 +1090,18 @@ private:
     }
 
     float getDepthValueAtCoord(int x, int y) {
-        void* data;
+        void* data; //verify
         vkMapMemory(device, stagingBufferMemory, 0, VK_WHOLE_SIZE, 0, &data);
-        float* depthValues = static_cast<float*>(data);
+        float* depthValues = static_cast<float*>(data); //verify the type
 
         // Ensure x and y are within bounds
         if (x >= 0 && x < swapChainExtent.width && y >= 0 && y < swapChainExtent.height) {
             int index = y * swapChainExtent.width + x;
             float depthValue = depthValues[index];
+            /*for (int i = 0; i < 200; i++) {
+                std::cout << depthValues[rand() % 600*600 - 1] << "\n";
+            }*/
             vkUnmapMemory(device, stagingBufferMemory);
-            for (int i = 0; i < 200; i++) {
-                std::cout << depthValues[rand() % 600] << "\n";
-            }
             return depthValue;
         }
         else {
@@ -1249,7 +1249,7 @@ private:
     void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
-        VkImageMemoryBarrier barrier{};
+        VkImageMemoryBarrier barrier{}; //verify barrier logic
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         barrier.oldLayout = oldLayout;
         barrier.newLayout = newLayout;
@@ -1658,16 +1658,17 @@ private:
     }
 
     UniformBufferObject initUbo(UniformBufferObject ubo) {
-        ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        //ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.model = glm::mat4(1.0f);
         ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
+        ubo.proj = glm::perspective(glm::radians(55.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 10.0f);
         ubo.proj[1][1] *= -1;
 
-        float scaleFactor = 1.0f;  // Example scale factor
-        glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(scaleFactor, scaleFactor, scaleFactor));
+        //float scaleFactor = 1.0f;  // Example scale factor
+        //glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(scaleFactor, scaleFactor, scaleFactor));
 
-        // Apply scaling to the view matrix
-        ubo.view = scaleMatrix * ubo.view;
+        //// Apply scaling to the view matrix
+        //ubo.view = scaleMatrix * ubo.view;
 
         return ubo;
     }
@@ -1765,8 +1766,7 @@ private:
             copyDepthBufferToStagingBuffer();
             depthBufferCopied = true;
         }*/
-        testPointDepth();
-
+   
         result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
@@ -1792,25 +1792,44 @@ private:
         // Wait for rendering to complete before proceeding =================
         vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
         //==================================
-        UniformBufferObject ubo{};
-        ubo = initUbo(ubo);
+        UniformBufferObject _ubo{};
+        _ubo = initUbo(_ubo);
 
-        glm::vec3 vertex = vertices[0].pos; // 'someIndex' should be defined based on your needs
+        glm::vec3 vertex = vertices[2].pos;
 
-        // Transform the vertex position into clip space (as shown previously)
+        // Transform the vertex position into clip space 
         glm::vec4 vertexPos = glm::vec4(vertex, 1.0f);
-        glm::vec4 clipSpacePos = ubo.proj * ubo.view * ubo.model * vertexPos;
+        glm::vec4 view = _ubo.view * _ubo.model * vertexPos;
 
-        // Perform perspective divide to get NDC
-        glm::vec3 ndc = glm::vec3(clipSpacePos) / clipSpacePos.w;
+        // (Clip Space)
+        glm::vec4 clip = _ubo.proj * view;
 
-        // Convert NDC to screen coordinates
+        // Espaço de coordenadas normalizadas (NDC)
+        glm::vec3 ndc = glm::vec3(clip) / clip.w;
+
+        // Converte coordenadas NDC para coordenadas de tela
         int x = static_cast<int>((ndc.x * 0.5f + 0.5f) * swapChainExtent.width);
         int y = static_cast<int>((ndc.y * 0.5f + 0.5f) * swapChainExtent.height);
 
         // Fetch the depth value at this screen position
-        float depthValue = getDepthValueAtCoord(x, y);
-        std::cout << std::fixed << std::setprecision(6) << "\nDepth Value at vertex (" << vertex.x << ", " << vertex.y << ", " << vertex.z << ") is: " << depthValue << "\n\n";
+        float depthValue = getDepthValueAtCoord(x, y-1);
+
+        //std::cout << "Matriz:" << "\n";
+        //for (int i = 0; i < 4; i++) {
+        //    for (int j = 0; j < 4; j++) {
+        //        std::cout << _ubo.view[i][j] << " ";
+        //    }
+        //    std::cout << "\n";
+        //}
+
+        // Imprime os valores para comparação
+        std::cout << std::fixed << std::setprecision(8);
+        std::cout << "Vertex Position: (" << vertex.x << ", " << vertex.y << ", " << vertex.z << ")\n";
+        std::cout << "z_view: " << view.x << ", " << view.y << ", " << view.z << "\n";
+        std::cout << "z_clip: " << clip.x << ", " << clip.y << ", " << clip.z << ", " << clip.w << "\n";
+        std::cout << "z_ndc: " << ndc.x << ", " << ndc.y << ", " << ndc.z << "\n";
+        std::cout << "Screen Coordinates: x = " << x << ", y = " << y << "\n";
+        std::cout << "Depth Value from Depth Buffer: " << depthValue << "\n\n";
     }
 
     VkShaderModule createShaderModule(const std::vector<char>& code) {

@@ -20,8 +20,8 @@ void main() {
     float adjustedDepth = pow(depth, gamma);
 
     // Mapeia o valor ajustado para tons de cinza
-    outColor = vec4(adjustedDepth, adjustedDepth, adjustedDepth, 1.0);
+    //outColor = vec4(adjustedDepth, adjustedDepth, adjustedDepth, 1.0);
 
     // Alternatively, you can output the original fragment color
-    // outColor = vec4(fragColor.x, fragColor.y, fragColor.z, 1.0);
+    outColor = vec4(fragColor.x, fragColor.y, fragColor.z, 1.0);
 }
