@@ -137,45 +137,45 @@ struct UniformBufferObject {
 //    4, 5, 6, 6, 7, 4  //Quad2
 //};
 
-const std::vector<Vertex> vertices = {
-    // Quad 1
-    {{-0.5f, -0.5f, 0.4f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{ 0.5f, -0.5f, 0.4f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{ 0.5f,  0.5f, 0.4f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{-0.5f,  0.5f, 0.4f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+//const std::vector<Vertex> vertices = {
+//    // Quad 1
+//    //{{-0.5f, -0.5f, 0.4f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+//    //{{ 0.5f, -0.5f, 0.4f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+//    //{{ 0.5f,  0.5f, 0.4f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+//    //{{-0.5f,  0.5f, 0.4f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+//
+//    //// Quad 2 (shifted along X axis)
+//    //{{ 0.6f, -0.5f, -0.2f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+//    //{{ 1.6f, -0.5f, -0.2f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+//    //{{ 1.6f,  0.5f, -0.2f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+//    //{{ 0.6f,  0.5f, -0.2f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+//
+//    //// Quad 3 (shifted along Y axis)
+//    //{{-0.5f,  0.6f, -0.8f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+//    //{{ 0.5f,  0.6f, -0.8f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+//    //{{ 0.5f,  1.6f, -0.8f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+//    //{{-0.5f,  1.6f, -0.8f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+//
+//    //// Quad 4 (shifted along Z axis)
+//    //{{-0.5f, -0.5f, -1.8f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+//    //{{ 0.5f, -0.5f, -1.8f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+//    //{{ 0.5f,  0.5f, -1.8f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+//    //{{-0.5f,  0.5f, -1.8f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+//};
 
-    // Quad 2 (shifted along X axis)
-    {{ 0.6f, -0.5f, -0.2f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{ 1.6f, -0.5f, -0.2f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{ 1.6f,  0.5f, -0.2f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{ 0.6f,  0.5f, -0.2f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-
-    // Quad 3 (shifted along Y axis)
-    {{-0.5f,  0.6f, -0.8f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{ 0.5f,  0.6f, -0.8f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{ 0.5f,  1.6f, -0.8f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{-0.5f,  1.6f, -0.8f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-
-    // Quad 4 (shifted along Z axis)
-    {{-0.5f, -0.5f, -1.8f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{ 0.5f, -0.5f, -1.8f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{ 0.5f,  0.5f, -1.8f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{-0.5f,  0.5f, -1.8f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
-};
-
-const std::vector<uint16_t> indices = {
-    // Quad 1
-    0, 1, 2, 2, 3, 0,
-
-    // Quad 2
-    4, 5, 6, 6, 7, 4,
-
-    // Quad 3
-    8, 9, 10, 10, 11, 8,
-
-    // Quad 4
-    12, 13, 14, 14, 15, 12
-};
+//const std::vector<uint16_t> indices = {
+//    // Quad 1
+//    //0, 1, 2, 2, 3, 0,
+//
+//    //// Quad 2
+//    //4, 5, 6, 6, 7, 4,
+//
+//    //// Quad 3
+//    //8, 9, 10, 10, 11, 8,
+//
+//    //// Quad 4
+//    //12, 13, 14, 14, 15, 12,
+//};
 
 //const std::vector<Vertex> vertices = {
 //    // Triangle spanning from near to far plane
@@ -240,6 +240,31 @@ const std::vector<uint16_t> indices = {
 //    // Bottom face
 //    20, 21, 22, 22, 23, 20
 //};
+
+const std::vector<Vertex> vertices = {
+    // Triangle 1 (ajustado para aparecer no centro da visão da câmera)
+    { { 0.5f, 0.5f, 0.4f },  {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},  // Bottom-left
+    { { 1.0f, 0.5f, 0.4f }, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},  // Top
+    { { 0.5f, 1.0f, 0.4f }, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},  // Bottom-right
+
+    // Triangle 2 (levemente mais acima)
+    {{ 230.0f, 223.0f, -17.0f}, {1.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{ 231.0f, 224.0f, -17.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 0.0f}},
+    {{ 232.0f, 224.0f, -17.0f}, {1.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+
+    // Triangle 3 (mais distante, mas visível)
+    {{ 230.0f, 223.0f, -18.0f}, {0.5f, 0.5f, 0.0f}, {1.0f, 0.0f}},
+    {{ 231.0f, 224.0f, -18.0f}, {0.0f, 1.0f, 0.5f}, {0.0f, 0.0f}},
+    {{ 232.0f, 224.0f, -18.0f}, {0.0f, 0.5f, 1.0f}, {0.0f, 1.0f}},
+};
+
+const std::vector<uint16_t> indices = {
+    0, 1, 2,
+    3, 4, 5,
+    6, 7, 8,
+};
+
+
 
 bool isPointOccludedByTriangle(
     const glm::vec3& point, const glm::mat4& modelMatrix, 
@@ -412,7 +437,7 @@ private:
     }
 
     void mainLoop() {
-        testSceneOccluded();
+        testSceneOccludedDirectAlgorithm();
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
             drawFrame();
@@ -1659,21 +1684,56 @@ private:
 
     UniformBufferObject initUbo(UniformBufferObject ubo) {
         //ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        
         ubo.model = glm::mat4(1.0f);
-        ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        /*ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         ubo.proj = glm::perspective(glm::radians(55.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 10.0f);
-        ubo.proj[1][1] *= -1;
+        ubo.proj[1][1] *= -1;*/
+
+        std::vector<std::vector<float>> K = {
+            { 2, 0, 10 },   // K[0][0] = 2, K[0][2] = 10 (parâmetros intrínsecos)
+            { 0, 3, 14 },   // K[1][1] = 3, K[1][2] = 14 (ajuste para as proporções da câmera)
+            { 0, 0, 1 }
+        };
+
+        std::vector<std::vector<float>> R = {
+            { 1, 0, 0 },   // Matriz identidade (nenhuma rotação)
+            { 0, -1, 0 },  // Inversão no eixo Y
+            { 0, 0, -1 }   // Inversão no eixo Z (olhando para frente)
+        };
+
+        std::vector<float> t = { 231, 223, -18 };  // Translação da câmera
+
+
+
+        ubo.view = glm::mat4(
+            glm::vec4(R[0][0], R[1][0], R[2][0], 0.0f),  // Primeira coluna
+            glm::vec4(R[0][1], R[1][1], R[2][1], 0.0f),  // Segunda coluna
+            glm::vec4(R[0][2], R[1][2], R[2][2], 0.0f),  // Terceira coluna
+            glm::vec4(-t[0], -t[1], -t[2], 1.0f)
+        );
+
+        float zNear = 0.1f;
+        float zFar = 100.0f;
+        float width = static_cast<float>(swapChainExtent.width);
+        float height = static_cast<float>(swapChainExtent.height);
+
+        ubo.proj = glm::mat4(
+            glm::vec4(2 * K[0][0] / width, 0.0f, 0.0f, 0.0f),
+            glm::vec4(0.0f, -2 * K[1][1] / height, 0.0f, 0.0f),
+            glm::vec4(2 * K[0][2] / width - 1, 2 * K[1][2] / height - 1, (zFar) / (zNear - zFar), -1.0f),
+            glm::vec4(0.0f, 0.0f, zFar * zNear / (zNear - zFar), 0.0f)
+        );
 
         //float scaleFactor = 1.0f;  // Example scale factor
         //glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(scaleFactor, scaleFactor, scaleFactor));
-
         //// Apply scaling to the view matrix
         //ubo.view = scaleMatrix * ubo.view;
 
         return ubo;
     }
 
-    void testSceneOccluded() {
+    void testSceneOccludedDirectAlgorithm() {
         UniformBufferObject ubo{};
         ubo = initUbo(ubo);
         int count = 0;
@@ -1794,42 +1854,73 @@ private:
         //==================================
         UniformBufferObject _ubo{};
         _ubo = initUbo(_ubo);
+        //int count = 0;
 
-        glm::vec3 vertex = vertices[2].pos;
+        //auto start = std::chrono::high_resolution_clock::now();
+
+        glm::vec3 vertex = vertices[1].pos;
 
         // Transform the vertex position into clip space 
         glm::vec4 vertexPos = glm::vec4(vertex, 1.0f);
-        glm::vec4 view = _ubo.view * _ubo.model * vertexPos;
 
-        // (Clip Space)
+        glm::vec4 view = _ubo.view * _ubo.model * vertexPos;
         glm::vec4 clip = _ubo.proj * view;
 
         // Espaço de coordenadas normalizadas (NDC)
         glm::vec3 ndc = glm::vec3(clip) / clip.w;
 
-        // Converte coordenadas NDC para coordenadas de tela
+        // Converte coordenadas NDC para coordenadas de tela (x e y, variando de -1 a 1)
         int x = static_cast<int>((ndc.x * 0.5f + 0.5f) * swapChainExtent.width);
         int y = static_cast<int>((ndc.y * 0.5f + 0.5f) * swapChainExtent.height);
 
         // Fetch the depth value at this screen position
         float depthValue = getDepthValueAtCoord(x, y-1);
 
-        //std::cout << "Matriz:" << "\n";
-        //for (int i = 0; i < 4; i++) {
-        //    for (int j = 0; j < 4; j++) {
-        //        std::cout << _ubo.view[i][j] << " ";
-        //    }
-        //    std::cout << "\n";
-        //}
+        glm::mat4 MVP = _ubo.proj * _ubo.view * _ubo.model;
+
+        std::cout << "View Matriz:" << "\n";
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                std::cout << _ubo.view[i][j] << " ";
+            }
+            std::cout << "\n\n";
+        }
+
+        std::cout << "Projection Matriz:" << "\n";
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                std::cout << _ubo.proj[i][j] << " ";
+            }
+            std::cout << "\n\n";
+        }
+
+        std::cout << "MVP Matriz:" << "\n";
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                std::cout << MVP[i][j] << " ";
+            }
+            std::cout << "\n\n";
+        }
 
         // Imprime os valores para comparação
         std::cout << std::fixed << std::setprecision(8);
         std::cout << "Vertex Position: (" << vertex.x << ", " << vertex.y << ", " << vertex.z << ")\n";
-        std::cout << "z_view: " << view.x << ", " << view.y << ", " << view.z << "\n";
-        std::cout << "z_clip: " << clip.x << ", " << clip.y << ", " << clip.z << ", " << clip.w << "\n";
-        std::cout << "z_ndc: " << ndc.x << ", " << ndc.y << ", " << ndc.z << "\n";
+        std::cout << "view: " << view.x << ", " << view.y << ", " << view.z << ", " << view.w << "\n";
+        std::cout << "clip: " << clip.x << ", " << clip.y << ", " << clip.z << ", " << clip.w << "\n";
+        std::cout << "ndc: " << ndc.x << ", " << ndc.y << ", " << ndc.z << "\n";
         std::cout << "Screen Coordinates: x = " << x << ", y = " << y << "\n";
         std::cout << "Depth Value from Depth Buffer: " << depthValue << "\n\n";
+
+            /*if (std::abs(depthValue - ndc.z) < 0.001)
+                std::cout << "Point " << i << " is NOT occluded! " << std::abs(depthValue - ndc.z) << "\n\n";
+            else
+                std::cout << "Point " << i << " is occluded! " << std::abs(depthValue - ndc.z) << "\n\n";
+
+            count++;
+
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = end - start;
+        std::cout << "Execution time: " << elapsed.count() << " seconds, with " << count << " tests." << "\n\n";*/
     }
 
     VkShaderModule createShaderModule(const std::vector<char>& code) {
