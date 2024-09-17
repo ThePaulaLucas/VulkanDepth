@@ -241,29 +241,29 @@ struct UniformBufferObject {
 //    20, 21, 22, 22, 23, 20
 //};
 
-const std::vector<Vertex> vertices = {
-    // Triangle 1 (ajustado para aparecer no centro da visão da câmera)
-    { { 0.5f, 0.5f, 0.4f },  {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},  // Bottom-left
-    { { 1.0f, 0.5f, 0.4f }, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},  // Top
-    { { 0.5f, 1.0f, 0.4f }, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},  // Bottom-right
-
-    // Triangle 2 (levemente mais acima)
-    {{ 230.0f, 223.0f, -17.0f}, {1.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-    {{ 231.0f, 224.0f, -17.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 0.0f}},
-    {{ 232.0f, 224.0f, -17.0f}, {1.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-
-    // Triangle 3 (mais distante, mas visível)
-    {{ 230.0f, 223.0f, -18.0f}, {0.5f, 0.5f, 0.0f}, {1.0f, 0.0f}},
-    {{ 231.0f, 224.0f, -18.0f}, {0.0f, 1.0f, 0.5f}, {0.0f, 0.0f}},
-    {{ 232.0f, 224.0f, -18.0f}, {0.0f, 0.5f, 1.0f}, {0.0f, 1.0f}},
+const std::vector<Vertex> pointVertices = {
+    { { 0.0f, 0.0f, -5.0f }, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} },  // Ponto no centro da tela
+    { { 1.0f, 0.0f, -5.0f }, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f} },  // Ponto à direita
+    { { -1.0f, 0.0f, -2.0f }, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f} },  // Ponto à esquerda
+    { { 0.0f, 1.0f, -2.0f }, {1.0f, 1.0f, 0.0f}, {0.0f, 0.0f} },  // Ponto acima
+    { { 0.0f, -1.0f, -3.0f }, {1.0f, 0.0f, 1.0f}, {0.0f, 0.0f} }    // Ponto distante mas visível
 };
+
+const std::vector<Vertex> vertices = {
+    { { 1.0f, 0.0f, -3.0f }, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} },   // Ponto 1
+    { { -1.0f, 0.0f, -3.0f }, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f} },   // Ponto 2
+    { { 0.0f, -1.0f, -3.0f }, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f} },   // Ponto 3
+
+    { { -2.0f, 0.0f, -5.0f }, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} },   // Ponto 1
+    { { 0.0f, 1.0f, -5.0f }, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f} },   // Ponto 2
+    { { 0.0f, -1.0f, -5.0f }, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f} },
+};
+
 
 const std::vector<uint16_t> indices = {
-    0, 1, 2,
-    3, 4, 5,
-    6, 7, 8,
+    0,2,1,
+    3,4,5
 };
-
 
 
 bool isPointOccludedByTriangle(
@@ -356,7 +356,8 @@ private:
     VkRenderPass renderPass;
     VkDescriptorSetLayout descriptorSetLayout;
     VkPipelineLayout pipelineLayout;
-    VkPipeline graphicsPipeline;
+    VkPipeline graphicsTrianglePipeline;
+    VkPipeline graphicsPointPipeline;
 
     VkCommandPool commandPool;
 
@@ -377,6 +378,8 @@ private:
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
     bool depthBufferCopied = false;
+    VkBuffer pointVertexBuffer;
+    VkDeviceMemory pointVertexBufferMemory;
 
     std::vector<VkBuffer> uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
@@ -419,7 +422,8 @@ private:
         createImageViews();
         createRenderPass();
         createDescriptorSetLayout();
-        createGraphicsPipeline();
+        createGraphicsTrianglePipeline();
+        createGraphicsPointPipeline();
         createCommandPool();
         createDepthResources();
         createFramebuffers();
@@ -428,6 +432,7 @@ private:
         createTextureSampler();
         createVertexBuffer();
         createIndexBuffer();
+        createPointVertexBuffer();
         createStagingBuffer();
         createUniformBuffers();
         createDescriptorPool();
@@ -465,7 +470,8 @@ private:
     void cleanup() {
         cleanupSwapChain();
 
-        vkDestroyPipeline(device, graphicsPipeline, nullptr);
+        vkDestroyPipeline(device, graphicsTrianglePipeline, nullptr);
+        vkDestroyPipeline(device, graphicsPointPipeline, nullptr);
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
         vkDestroyRenderPass(device, renderPass, nullptr);
 
@@ -810,7 +816,7 @@ private:
         }
     }
 
-    void createGraphicsPipeline() {
+    void createGraphicsTrianglePipeline() {
         auto vertShaderCode = readFile("shaders/vert.spv");
         auto fragShaderCode = readFile("shaders/frag.spv");
 
@@ -844,7 +850,7 @@ private:
 
         VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; //VK_PRIMITIVE_TOPOLOGY_POINT_LIST // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; 
         inputAssembly.primitiveRestartEnable = VK_FALSE;
 
         VkPipelineViewportStateCreateInfo viewportState{};
@@ -925,7 +931,130 @@ private:
         pipelineInfo.subpass = 0;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsTrianglePipeline) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create graphics pipeline!");
+        }
+
+        vkDestroyShaderModule(device, fragShaderModule, nullptr);
+        vkDestroyShaderModule(device, vertShaderModule, nullptr);
+    }
+
+    void createGraphicsPointPipeline() {
+        auto vertShaderCode = readFile("shaders/vert.spv");
+        auto fragShaderCode = readFile("shaders/frag.spv");
+
+        VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+        VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+        VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+        vertShaderStageInfo.module = vertShaderModule;
+        vertShaderStageInfo.pName = "main";
+
+        VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        fragShaderStageInfo.module = fragShaderModule;
+        fragShaderStageInfo.pName = "main";
+
+        VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+        auto bindingDescription = Vertex::getBindingDescription();
+        auto attributeDescriptions = Vertex::getAttributeDescriptions();
+
+        vertexInputInfo.vertexBindingDescriptionCount = 1;
+        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST; //VK_PRIMITIVE_TOPOLOGY_POINT_LIST // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; 
+        inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+        VkPipelineViewportStateCreateInfo viewportState{};
+        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportState.viewportCount = 1;
+        viewportState.scissorCount = 1;
+
+        VkPipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizer.depthClampEnable = VK_FALSE;
+        rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterizer.lineWidth = 1.0f;
+        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        rasterizer.depthBiasEnable = VK_FALSE;
+
+        VkPipelineMultisampleStateCreateInfo multisampling{};
+        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisampling.sampleShadingEnable = VK_FALSE;
+        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+        VkPipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable = VK_TRUE;
+        depthStencil.depthWriteEnable = VK_TRUE;
+        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+        depthStencil.depthBoundsTestEnable = VK_FALSE;
+        depthStencil.stencilTestEnable = VK_FALSE;
+
+        VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+        colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorBlendAttachment.blendEnable = VK_FALSE;
+
+        VkPipelineColorBlendStateCreateInfo colorBlending{};
+        colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlending.logicOpEnable = VK_FALSE;
+        colorBlending.logicOp = VK_LOGIC_OP_COPY;
+        colorBlending.attachmentCount = 1;
+        colorBlending.pAttachments = &colorBlendAttachment;
+        colorBlending.blendConstants[0] = 0.0f;
+        colorBlending.blendConstants[1] = 0.0f;
+        colorBlending.blendConstants[2] = 0.0f;
+        colorBlending.blendConstants[3] = 0.0f;
+
+        std::vector<VkDynamicState> dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        };
+        VkPipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamicState.pDynamicStates = dynamicStates.data();
+
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.setLayoutCount = 1;
+        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+
+        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create pipeline layout!");
+        }
+
+        VkGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount = 2;
+        pipelineInfo.pStages = shaderStages;
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState = &multisampling;
+        pipelineInfo.pDepthStencilState = &depthStencil;
+        pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = &dynamicState;
+        pipelineInfo.layout = pipelineLayout;
+        pipelineInfo.renderPass = renderPass;
+        pipelineInfo.subpass = 0;
+        pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPointPipeline) != VK_SUCCESS) {
             throw std::runtime_error("failed to create graphics pipeline!");
         }
 
@@ -1418,6 +1547,26 @@ private:
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
 
+    void createPointVertexBuffer() {
+        VkDeviceSize bufferSize = sizeof(pointVertices[0]) * pointVertices.size();
+
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+        void* data;
+        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        memcpy(data, pointVertices.data(), (size_t)bufferSize);
+        vkUnmapMemory(device, stagingBufferMemory);
+
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, pointVertexBuffer, pointVertexBufferMemory);
+
+        copyBuffer(stagingBuffer, pointVertexBuffer, bufferSize);
+
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingBufferMemory, nullptr);
+    }
+
     void createUniformBuffers() {
         VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
@@ -1559,6 +1708,8 @@ private:
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
         VkBufferCopy copyRegion{};
+        copyRegion.srcOffset = 0; 
+        copyRegion.dstOffset = 0;
         copyRegion.size = size;
         vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
@@ -1616,7 +1767,7 @@ private:
 
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsTrianglePipeline);
 
         VkViewport viewport{};
         viewport.x = 0.0f;
@@ -1632,6 +1783,7 @@ private:
         scissor.extent = swapChainExtent;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
+        // ---- Renderizar Triângulos ----
         VkBuffer vertexBuffers[] = { vertexBuffer };
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
@@ -1640,7 +1792,16 @@ private:
 
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
+        // Desenhar triângulos
         vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+
+        // ---- Renderizar Pontos ----
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPointPipeline);
+        VkBuffer pointBuffers[] = { pointVertexBuffer };
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, pointBuffers, offsets);
+
+        // Desenhar pontos (usando vkCmdDraw)
+        vkCmdDraw(commandBuffer, static_cast<uint32_t>(pointVertices.size()), 1, 0, 0);
 
         vkCmdEndRenderPass(commandBuffer);
 
@@ -1682,53 +1843,43 @@ private:
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
 
-    UniformBufferObject initUbo(UniformBufferObject ubo) {
-        //ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        
+    UniformBufferObject initUbo(UniformBufferObject ubo) {   
         ubo.model = glm::mat4(1.0f);
-        /*ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.proj = glm::perspective(glm::radians(55.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 10.0f);
-        ubo.proj[1][1] *= -1;*/
 
         std::vector<std::vector<float>> K = {
-            { 2, 0, 10 },   // K[0][0] = 2, K[0][2] = 10 (parâmetros intrínsecos)
-            { 0, 3, 14 },   // K[1][1] = 3, K[1][2] = 14 (ajuste para as proporções da câmera)
+            { 1000, 0, 400 },   // Fator de escala em x (focal length), centro da câmera em x = 400 (meio de uma janela 800x600)
+            { 0, 1000, 300 },   // Fator de escala em y (focal length), centro da câmera em y = 300
             { 0, 0, 1 }
         };
 
         std::vector<std::vector<float>> R = {
             { 1, 0, 0 },   // Matriz identidade (nenhuma rotação)
             { 0, -1, 0 },  // Inversão no eixo Y
-            { 0, 0, -1 }   // Inversão no eixo Z (olhando para frente)
+            { 0, 0, 1 }   // Inversão no eixo Z (olhando para frente)
         };
 
-        std::vector<float> t = { 231, 223, -18 };  // Translação da câmera
+        std::vector<float> t = { 0.0f, 0.0f, 5.0f };  // Translação da câmera
 
 
 
         ubo.view = glm::mat4(
-            glm::vec4(R[0][0], R[1][0], R[2][0], 0.0f),  // Primeira coluna
+            glm::vec4(R[0][0], R[1][0], R[2][0], 0.0f),  // Primeira coluna da matriz
             glm::vec4(R[0][1], R[1][1], R[2][1], 0.0f),  // Segunda coluna
             glm::vec4(R[0][2], R[1][2], R[2][2], 0.0f),  // Terceira coluna
-            glm::vec4(-t[0], -t[1], -t[2], 1.0f)
+            glm::vec4(-t[0], -t[1], -t[2], 1.0f)         // Vetor de translação
         );
 
-        float zNear = 0.1f;
-        float zFar = 100.0f;
-        float width = static_cast<float>(swapChainExtent.width);
-        float height = static_cast<float>(swapChainExtent.height);
+        static float zNear = 0.1f;
+        static float zFar = 100.0f;
+        static float width = static_cast<float>(swapChainExtent.width);
+        static float height = static_cast<float>(swapChainExtent.height);
 
         ubo.proj = glm::mat4(
             glm::vec4(2 * K[0][0] / width, 0.0f, 0.0f, 0.0f),
             glm::vec4(0.0f, -2 * K[1][1] / height, 0.0f, 0.0f),
-            glm::vec4(2 * K[0][2] / width - 1, 2 * K[1][2] / height - 1, (zFar) / (zNear - zFar), -1.0f),
+            glm::vec4(2 * K[0][2] / width - 1, 2 * K[1][2] / height - 1, zFar / (zNear - zFar), -1.0f),                
             glm::vec4(0.0f, 0.0f, zFar * zNear / (zNear - zFar), 0.0f)
         );
-
-        //float scaleFactor = 1.0f;  // Example scale factor
-        //glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(scaleFactor, scaleFactor, scaleFactor));
-        //// Apply scaling to the view matrix
-        //ubo.view = scaleMatrix * ubo.view;
 
         return ubo;
     }
@@ -1874,7 +2025,7 @@ private:
         int y = static_cast<int>((ndc.y * 0.5f + 0.5f) * swapChainExtent.height);
 
         // Fetch the depth value at this screen position
-        float depthValue = getDepthValueAtCoord(x, y-1);
+        float depthValue = getDepthValueAtCoord(x, y);
 
         glm::mat4 MVP = _ubo.proj * _ubo.view * _ubo.model;
 
@@ -1900,6 +2051,14 @@ private:
                 std::cout << MVP[i][j] << " ";
             }
             std::cout << "\n\n";
+        }
+
+
+        for (size_t i = 0; i < vertices.size(); ++i) {
+            glm::vec4 clipSpacePoint = _ubo.proj * _ubo.view * glm::vec4(vertices[i].pos, 1.0f);
+            glm::vec3 ndc = glm::vec3(clipSpacePoint) / clipSpacePoint.w;
+
+            std::cout << "Vertice " << i << ": NDC: " << ndc.x << ", " << ndc.y << ", " << ndc.z << "\n";
         }
 
         // Imprime os valores para comparação

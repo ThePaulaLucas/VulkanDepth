@@ -11,7 +11,6 @@ layout(location = 0) out vec4 outColor;
 void main() {
     //float depth = fragPos.z / fragPos.w; // Clip space depth
     //outColor = vec4(depth, depth, depth, 1.0);
-
     // Accessing the depth value
     float depth = gl_FragCoord.z;
 
