@@ -1847,15 +1847,15 @@ private:
         ubo.model = glm::mat4(1.0f);
 
         std::vector<std::vector<float>> K = {
-            { 1000, 0, 400 },   // Fator de escala em x (focal length), centro da câmera em x = 400 (meio de uma janela 800x600)
-            { 0, 1000, 300 },   // Fator de escala em y (focal length), centro da câmera em y = 300
+            { 2, 0, 400 },   // Fator de escala em x (focal length), centro da câmera em x = 400 (meio de uma janela 800x600)
+            { 0, 3, 300 },   // Fator de escala em y (focal length), centro da câmera em y = 300
             { 0, 0, 1 }
         };
 
         std::vector<std::vector<float>> R = {
             { 1, 0, 0 },   // Matriz identidade (nenhuma rotação)
             { 0, -1, 0 },  // Inversão no eixo Y
-            { 0, 0, 1 }   // Inversão no eixo Z (olhando para frente)
+            { 0, 0, 1 } 
         };
 
         std::vector<float> t = { 0.0f, 0.0f, 5.0f };  // Translação da câmera
@@ -1875,8 +1875,8 @@ private:
         static float height = static_cast<float>(swapChainExtent.height);
 
         ubo.proj = glm::mat4(
-            glm::vec4(2 * K[0][0] / width, 0.0f, 0.0f, 0.0f),
-            glm::vec4(0.0f, -2 * K[1][1] / height, 0.0f, 0.0f),
+            glm::vec4(2 * K[0][0], 0.0f, 0.0f, 0.0f),
+            glm::vec4(0.0f, -2 * K[1][1], 0.0f, 0.0f),
             glm::vec4(2 * K[0][2] / width - 1, 2 * K[1][2] / height - 1, zFar / (zNear - zFar), -1.0f),                
             glm::vec4(0.0f, 0.0f, zFar * zNear / (zNear - zFar), 0.0f)
         );
