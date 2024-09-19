@@ -241,30 +241,42 @@ struct UniformBufferObject {
 //    20, 21, 22, 22, 23, 20
 //};
 
-const std::vector<Vertex> pointVertices = {
-    { { 0.0f, 0.0f, -5.0f }, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} },  // Ponto no centro da tela
-    { { 1.0f, 0.0f, -5.0f }, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f} },  // Ponto à direita
-    { { -1.0f, 0.0f, -2.0f }, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f} },  // Ponto à esquerda
-    { { 0.0f, 1.0f, -2.0f }, {1.0f, 1.0f, 0.0f}, {0.0f, 0.0f} },  // Ponto acima
-    { { 0.0f, -1.0f, -3.0f }, {1.0f, 0.0f, 1.0f}, {0.0f, 0.0f} }    // Ponto distante mas visível
-};
+std::vector<Vertex> generatePoints(int numPoints) {
+    std::vector<Vertex> pointVertices;
+    float zStart = -6.0f;
+    float zEnd = 0.0f; 
+    float zStep = (zEnd - zStart) / (numPoints - 1);  
+
+    for (int i = 0; i < numPoints; ++i) {
+        float t = static_cast<float>(i) / numPoints; 
+        float x = sinf(t * 3.14f * 1.1); 
+        float y = cosf(t * 3.14f * 1.5); 
+        float z = zStart + i * zStep; 
+
+        glm::vec3 color = glm::vec3(t, 1.0f - t, 0.5f);
+
+        pointVertices.push_back({ {x, y, z}, color, {0.0f, 0.0f} });
+    }
+
+    return pointVertices;
+}
+
+std::vector<Vertex> pointVertices = generatePoints(100);
 
 const std::vector<Vertex> vertices = {
-    { { 1.0f, 0.0f, -3.0f }, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} },   // Ponto 1
-    { { -1.0f, 0.0f, -3.0f }, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f} },   // Ponto 2
-    { { 0.0f, -1.0f, -3.0f }, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f} },   // Ponto 3
+    { { 1.7f, 0.0f, -4.35f }, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} },   // Ponto 1
+    { { -1.0f, 1.0f, -2.f }, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f} },   // Ponto 2
+    { { 0.0f, -1.0f, -2.f }, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f} },   // Ponto 3
 
     { { -2.0f, 0.0f, -5.0f }, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} },   // Ponto 1
-    { { 0.0f, 1.0f, -5.0f }, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f} },   // Ponto 2
-    { { 0.0f, -1.0f, -5.0f }, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f} },
+    { { 1.f, 1.2f, -5.0f }, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f} },   // Ponto 2
+    { { 0.8f, -1.0f, -5.0f }, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f} },
 };
-
 
 const std::vector<uint16_t> indices = {
     0,2,1,
     3,4,5
 };
-
 
 bool isPointOccludedByTriangle(
     const glm::vec3& point, const glm::mat4& modelMatrix, 
@@ -1877,9 +1889,10 @@ private:
         ubo.proj = glm::mat4(
             glm::vec4(2 * K[0][0], 0.0f, 0.0f, 0.0f),
             glm::vec4(0.0f, -2 * K[1][1], 0.0f, 0.0f),
-            glm::vec4(2 * K[0][2] / width - 1, 2 * K[1][2] / height - 1, zFar / (zNear - zFar), -1.0f),                
-            glm::vec4(0.0f, 0.0f, zFar * zNear / (zNear - zFar), 0.0f)
+            glm::vec4(2 * K[0][2] / width - 1, 2 * K[1][2] / height - 1, -zFar / (zFar - zNear), -1.0f),                
+            glm::vec4(0.0f, 0.0f, -zFar * zNear / (zFar - zNear), 0.0f)
         );
+
 
         return ubo;
     }
@@ -2009,7 +2022,7 @@ private:
 
         //auto start = std::chrono::high_resolution_clock::now();
 
-        glm::vec3 vertex = vertices[1].pos;
+        glm::vec3 vertex = pointVertices[0].pos;
 
         // Transform the vertex position into clip space 
         glm::vec4 vertexPos = glm::vec4(vertex, 1.0f);
@@ -2054,12 +2067,12 @@ private:
         }
 
 
-        for (size_t i = 0; i < vertices.size(); ++i) {
+        /*for (size_t i = 0; i < vertices.size(); ++i) {
             glm::vec4 clipSpacePoint = _ubo.proj * _ubo.view * glm::vec4(vertices[i].pos, 1.0f);
             glm::vec3 ndc = glm::vec3(clipSpacePoint) / clipSpacePoint.w;
 
             std::cout << "Vertice " << i << ": NDC: " << ndc.x << ", " << ndc.y << ", " << ndc.z << "\n";
-        }
+        }*/
 
         // Imprime os valores para comparação
         std::cout << std::fixed << std::setprecision(8);
