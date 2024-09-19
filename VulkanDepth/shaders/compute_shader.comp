@@ -1,0 +1,47 @@
+#version 450
+
+layout(binding = 0) uniform UniformBufferObject {
+    mat4 model;
+    mat4 view;
+    mat4 proj;
+} ubo;
+
+layout(binding = 1) buffer Points {
+    vec3 points[];  // Buffer com os pontos a serem testados
+};
+
+layout(binding = 2) uniform sampler2D depthImage;  // Depth buffer como textura 2D
+
+layout(binding = 3) buffer OcclusionResults {
+    int results[];  // Buffer que vai armazenar 1 (ocluído) ou 0 (não ocluído)
+};
+
+layout(local_size_x = 64) in;
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;  // Índice do ponto a ser processado
+
+    // Pega o ponto correspondente do buffer
+    vec3 point = points[index];
+
+    // Transforma o ponto de modelo para clip space
+    vec4 clipSpacePos = ubo.proj * ubo.view * ubo.model * vec4(point, 1.0);
+
+    // Converte para coordenadas normalizadas (NDC)
+    vec3 ndc = clipSpacePos.xyz / clipSpacePos.w;
+
+    // Converte NDC para coordenadas de tela (0 a 1)
+    vec2 screenCoords = ndc.xy * 0.5 + 0.5;
+
+    // Acessa o valor do depth buffer na posição de tela
+    float depthBufferValue = texture(depthImage, screenCoords).r;
+
+    // Compara a profundidade do ponto transformado com o valor do depth buffer
+    if (ndc.z > depthBufferValue + 0.0001) {
+        // O ponto está ocluído
+        results[index] = 1;
+    } else {
+        // O ponto não está ocluído
+        results[index] = 0;
+    }
+}

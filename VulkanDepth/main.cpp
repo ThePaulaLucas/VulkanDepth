@@ -11,12 +11,15 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#include <sstream>
+#include <memory>
 #include <stdexcept>
 #include <algorithm>
 #include <chrono>
 #include <vector>
 #include <cmath>
 #include <cstring>
+#include <string>
 #include <cstdlib>
 #include <cstdint>
 #include <limits>
@@ -24,10 +27,15 @@
 #include <optional>
 #include <set>
 
-const uint32_t WIDTH = 800;
-const uint32_t HEIGHT = 600;
+#ifdef _WIN32
+    #define popen _popen
+    #define pclose _pclose
+#endif
 
-const int MAX_FRAMES_IN_FLIGHT = 2;
+const uint32_t WIDTH = 1600;
+const uint32_t HEIGHT = 1200;
+
+const int MAX_FRAMES_IN_FLIGHT = 1;
 
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
@@ -63,9 +71,10 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily;
     std::optional<uint32_t> presentFamily;
+    std::optional<uint32_t> computeFamily;
 
     bool isComplete() {
-        return graphicsFamily.has_value() && presentFamily.has_value();
+        return graphicsFamily.has_value() && presentFamily.has_value() && computeFamily.has_value();
     }
 };
 
@@ -111,160 +120,236 @@ struct Vertex {
     }
 };
 
+struct Camera {
+    glm::mat3 K;  // Intrinsic matrix
+    glm::mat3 R;  // Rotation matrix
+    glm::vec3 T;  // Translation vector
+};
+
 struct UniformBufferObject {
     alignas(16) glm::mat4 model;
     alignas(16) glm::mat4 view;
     alignas(16) glm::mat4 proj;
 };
 
-//const std::vector<Vertex> vertices = {
-//    //Quad1
-//    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-//    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-//    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-//    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-//
-//
-//    //Quad2
-//    {{-0.5f, -0.5f, -0.8f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-//    {{0.5f, -0.5f, -0.8f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-//    {{0.5f, 0.5f, -0.8f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-//    {{-0.5f, 0.5f, -0.8f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
-//};
-//
-//const std::vector<uint16_t> indices = {
-//    0, 1, 2, 2, 3, 0, //Quad1
-//    4, 5, 6, 6, 7, 4  //Quad2
-//};
+int N_SURFACES;
+int CURRENT_INDEX_SURFACE = 1;
 
-//const std::vector<Vertex> vertices = {
-//    // Quad 1
-//    //{{-0.5f, -0.5f, 0.4f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-//    //{{ 0.5f, -0.5f, 0.4f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-//    //{{ 0.5f,  0.5f, 0.4f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-//    //{{-0.5f,  0.5f, 0.4f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-//
-//    //// Quad 2 (shifted along X axis)
-//    //{{ 0.6f, -0.5f, -0.2f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-//    //{{ 1.6f, -0.5f, -0.2f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-//    //{{ 1.6f,  0.5f, -0.2f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-//    //{{ 0.6f,  0.5f, -0.2f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-//
-//    //// Quad 3 (shifted along Y axis)
-//    //{{-0.5f,  0.6f, -0.8f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-//    //{{ 0.5f,  0.6f, -0.8f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-//    //{{ 0.5f,  1.6f, -0.8f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-//    //{{-0.5f,  1.6f, -0.8f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-//
-//    //// Quad 4 (shifted along Z axis)
-//    //{{-0.5f, -0.5f, -1.8f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-//    //{{ 0.5f, -0.5f, -1.8f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-//    //{{ 0.5f,  0.5f, -1.8f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-//    //{{-0.5f,  0.5f, -1.8f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-//};
+// Função para executar o script MATLAB e capturar a saída
+std::string execMATLAB(const char* cmd) {
+    std::cout << "Running matlab lofting.. \n";
+    std::array<char, 128> buffer;
+    std::string result;
+    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
+    if (!pipe) {
+        throw std::runtime_error("popen() failed!");
+    }
+    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+        result += buffer.data();
+    }
+    return result;
+}
 
-//const std::vector<uint16_t> indices = {
-//    // Quad 1
-//    //0, 1, 2, 2, 3, 0,
-//
-//    //// Quad 2
-//    //4, 5, 6, 6, 7, 4,
-//
-//    //// Quad 3
-//    //8, 9, 10, 10, 11, 8,
-//
-//    //// Quad 4
-//    //12, 13, 14, 14, 15, 12,
-//};
+std::pair<std::vector<Vertex>, std::vector<Camera>> parseCurvesAndCameras(const std::string& matlabOutput) {
+    std::vector<Vertex> curvas;
+    std::vector<Camera> cameras;
+    Camera currentCamera;
+    std::istringstream iss(matlabOutput);
+    std::string line;
+    float x, y, z;
+    int countPoints = 0;
+    int countCameras = 0;
 
-//const std::vector<Vertex> vertices = {
-//    // Triangle spanning from near to far plane
-//    {{ 0.0f,  0.5f,  0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}}, // Near plane (z = 0.0f)
-//    {{-0.5f, -0.5f,  1.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}}, // Far plane (z = 1.0f)
-//    {{ 0.5f, -0.5f,  1.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}} // Far plane (z = 1.0f)
-//};
-//
-//const std::vector<uint16_t> indices = {
-//    0, 1, 2
-//};
+    // Identificador de seção
+    enum Section { NONE, CURVES, CAMERA_INTRINSICS, CAMERA_ROTATION, CAMERA_TRANSLATION, NUMBER_OF_SURFACES} section = NONE;
 
-//const std::vector<Vertex> vertices = {
-//    // Front face
-//    {{-0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-//    {{ 0.5f, -0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-//    {{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-//    {{-0.5f,  0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
-//
-//    // Back face
-//    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-//    {{ 0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-//    {{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-//    {{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-//
-//    // Left face
-//    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-//    {{-0.5f, -0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-//    {{-0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-//    {{-0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
-//
-//    // Right face
-//    {{ 0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-//    {{ 0.5f, -0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-//    {{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-//    {{ 0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-//
-//    // Top face
-//    {{-0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
-//    {{-0.5f,  0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-//    {{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
-//    {{ 0.5f,  0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-//
-//    // Bottom face
-//    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
-//    {{-0.5f, -0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-//    {{ 0.5f, -0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
-//    {{ 0.5f, -0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
-//};
-//
-//const std::vector<uint16_t> indices = {
-//    // Front face
-//    0, 1, 2, 2, 3, 0,
-//    // Back face
-//    4, 5, 6, 6, 7, 4,
-//    // Left face
-//    8, 9, 10, 10, 11, 8,
-//    // Right face
-//    12, 13, 14, 14, 15, 12,
-//    // Top face
-//    16, 17, 18, 18, 19, 16,
-//    // Bottom face
-//    20, 21, 22, 22, 23, 20
-//};
+    int row = 0;
 
-const std::vector<Vertex> pointVertices = {
-    { { 0.0f, 0.0f, -5.0f }, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} },  // Ponto no centro da tela
-    { { 1.0f, 0.0f, -5.0f }, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f} },  // Ponto à direita
-    { { -1.0f, 0.0f, -2.0f }, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f} },  // Ponto à esquerda
-    { { 0.0f, 1.0f, -2.0f }, {1.0f, 1.0f, 0.0f}, {0.0f, 0.0f} },  // Ponto acima
-    { { 0.0f, -1.0f, -3.0f }, {1.0f, 0.0f, 1.0f}, {0.0f, 0.0f} }    // Ponto distante mas visível
-};
+    std::cout << "Starting parsing curves and cameras...\n";
 
-const std::vector<Vertex> vertices = {
-    { { 1.0f, 0.0f, -3.0f }, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} },   // Ponto 1
-    { { -1.0f, 0.0f, -3.0f }, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f} },   // Ponto 2
-    { { 0.0f, -1.0f, -3.0f }, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f} },   // Ponto 3
+    while (std::getline(iss, line)) {
+        std::istringstream pointStream(line);
 
-    { { -2.0f, 0.0f, -5.0f }, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} },   // Ponto 1
-    { { 0.0f, 1.0f, -5.0f }, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f} },   // Ponto 2
-    { { 0.0f, -1.0f, -5.0f }, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f} },
-};
+        if (line.find("Curva") != std::string::npos) {
+            section = CURVES;
+            continue;
+        }
+        if (line.find("Camera Intrinsics (K)") != std::string::npos) {
+            section = CAMERA_INTRINSICS;
+            row = 0;
+            continue;
+        }
+        if (line.find("Camera Rotation (R)") != std::string::npos) {
+            section = CAMERA_ROTATION;
+            row = 0;
+            continue;
+        }
+        if (line.find("Camera Translation (T)") != std::string::npos) {
+            section = CAMERA_TRANSLATION;
+            continue;
+        }
+        if (line.find("Number of surfaces") != std::string::npos) {
+            section = NUMBER_OF_SURFACES;
+            continue;
+        }
 
+        // Processar a seção atual com base no identificador 'section'
+        switch (section) {
+        case CURVES:
+            // Parse dos pontos da curva (x, y, z)
+            if (pointStream >> x >> y >> z) {
+                glm::vec3 color = glm::vec3(1.0f, 0.5f, 0.0f); // Cor padrão
+                curvas.push_back({ {x, y, z}, color, {0.0f, 0.0f} });
+                countPoints++;
+            }
+            break;
 
-const std::vector<uint16_t> indices = {
-    0,2,1,
-    3,4,5
-};
+        case CAMERA_INTRINSICS:
+            // Parse da matriz intrínseca K (3x3)
+            if (pointStream >> x >> y >> z) {
+                currentCamera.K[0][row] = x;
+                currentCamera.K[1][row] = y;
+                currentCamera.K[2][row] = z;
+                row++;
+                if (row == 3) section = NONE;  // Terminou de ler a matriz K
+            }
+            break;
 
+        case CAMERA_ROTATION:
+            // Parse da matriz de rotação R (3x3)
+            if (pointStream >> x >> y >> z) {
+                currentCamera.R[0][row] = x;
+                currentCamera.R[1][row] = y;
+                currentCamera.R[2][row] = z;
+                row++;
+                if (row == 3) section = NONE;  // Terminou de ler a matriz R
+            }
+            break;
+
+        case CAMERA_TRANSLATION:
+            // Parse do vetor de translação T (1x3)
+            if (pointStream >> x >> y >> z) {
+                currentCamera.T = glm::vec3(x, y, z);
+                cameras.push_back(currentCamera);
+                countCameras++;
+                section = NONE;  // Terminou de ler a translação
+            }
+            break;
+
+        case NUMBER_OF_SURFACES:
+            if (pointStream >> x) {
+                N_SURFACES = x;
+                std::cout << "Total number of surface: " << N_SURFACES << "\n";
+                section = NONE;
+            }
+            break;
+
+        default:
+            break;
+        }
+    }
+
+    std::cout << "Parsing ends. Points from curves: " << countPoints << " - Cameras: " << countCameras << "\n";
+
+    return { curvas, cameras };
+}
+
+std::pair<std::vector<Vertex>, std::vector<uint16_t>> parseSurfaces(const std::string& matlabOutput) {
+    std::vector<Vertex> superficies;
+    std::vector<uint16_t> indices;
+    std::istringstream iss(matlabOutput);
+    std::string line;
+    float x, y, z;
+    int idx1, idx2, idx3; // 'ignore' será usado para capturar o valor "3"
+
+    glm::vec3 color = glm::vec3(0.0f, 1.0f, 0.0f);  // Cor padrão para superfícies
+
+    bool parsingPoints = false;
+    bool parsingTriangles = false;
+
+    std::cout << "Iniciando parsing de superficies...\n";
+
+    while (std::getline(iss, line)) {
+        std::istringstream pointStream(line);
+
+        // Verificar se estamos começando a processar pontos de superfície
+        if (line.find("Surface points") != std::string::npos) {
+            parsingPoints = true;
+            parsingTriangles = false;
+            continue;
+        }
+
+        // Verificar se estamos começando a processar triângulos de superfície
+        if (line.find("Surface triangles") != std::string::npos) {
+            parsingPoints = false;
+            parsingTriangles = true;
+            continue;
+        }
+
+        // Processar pontos de superfície
+        if (parsingPoints) {
+            if (pointStream >> x >> y >> z) {
+                //std::cout << x << " " << y << " " << z << "\n";
+                superficies.push_back({ {x, y, z}, color, {0.0f, 0.0f} });
+            }
+        }
+
+        // Processar triângulos de superfície
+        if (parsingTriangles) {
+            if (pointStream >> idx1 >> idx2 >> idx3) {
+                //std::cout << idx1 << " " << idx2 << " " << idx3 << "\n";
+                indices.push_back(idx1);
+                indices.push_back(idx2);
+                indices.push_back(idx3);
+            }
+        }
+    }
+
+    std::cout << "Parsing finalizado. Total de pontos de superficie: " << superficies.size() << "\n";
+    std::cout << "Total de triangulos: " << indices.size() / 3 << "\n";
+
+    return { superficies, indices };
+}
+
+std::string matlabCommandCurveAndCamera = "matlab -batch \"cd('C:\\Users\\lucas\\Desktop\\LOFTING_ZICHANG\\Surface_by_Lofting_From_3D_Curves-main\\Surface_by_Lofting_From_3D_Curves-main'); run_loft;\""; // occlusion_consistency_check; run_loft
+std::string matlabOutputCurveAndCamera = execMATLAB(matlabCommandCurveAndCamera.c_str());
+
+std::pair<std::vector<Vertex>, std::vector<Camera>> result = parseCurvesAndCameras(matlabOutputCurveAndCamera);
+
+//Buffer that stores curve points
+std::vector<Vertex> pointVertices = result.first;
+std::vector<Camera> cameras = result.second;
+
+std::string matlabCommandSurfaceIndex(int index) {
+    std::string matlabCommandSurfaceIndex ="matlab -batch \"cd('C:\\Users\\lucas\\Desktop\\LOFTING_ZICHANG\\Surface_by_Lofting_From_3D_Curves-main\\Surface_by_Lofting_From_3D_Curves-main'); surfaceIndex=" + std::to_string(index) + "; read_surfaces;\""; // occlusion_consistency_check; run_loft
+    return matlabCommandSurfaceIndex;
+}
+std::string matlabOutputSurface = execMATLAB(matlabCommandSurfaceIndex(CURRENT_INDEX_SURFACE).c_str());
+std::pair<std::vector<Vertex>, std::vector<uint16_t>> resultSurf = parseSurfaces(matlabOutputSurface);
+
+//Buffer that stores surfaces vertex
+std::vector<Vertex> vertices = resultSurf.first;
+std::vector<uint16_t> indices = resultSurf.second;
+
+void printMatrix(const glm::mat3& matrix, const std::string& name) {
+    std::cout << name << ":\n";
+    for (int i = 0; i < 3; i++) {
+        std::cout << matrix[i][0] << " " << matrix[i][1] << " " << matrix[i][2] << std::endl;
+    }
+    std::cout << std::endl;
+}
+
+void printMatrix(const glm::mat4& matrix, const std::string& name) {
+    std::cout << name << ":\n";
+    for (int i = 0; i < 4; i++) {
+        std::cout << matrix[i][0] << " " << matrix[i][1] << " " << matrix[i][2] << " " << matrix[i][3] << std::endl;
+    }
+    std::cout << std::endl;
+}
+
+void printVector(const glm::vec3& vector, const std::string& name) {
+    std::cout << name << ": " << vector.x << " " << vector.y << " " << vector.z << "\n\n";
+}
 
 bool isPointOccludedByTriangle(
     const glm::vec3& point, const glm::mat4& modelMatrix, 
@@ -345,6 +430,7 @@ private:
 
     VkQueue graphicsQueue;
     VkQueue presentQueue;
+    VkQueue computeQueue;
 
     VkSwapchainKHR swapChain;
     std::vector<VkImage> swapChainImages;
@@ -355,16 +441,21 @@ private:
 
     VkRenderPass renderPass;
     VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorSetLayout computeDescriptorSetLayout;
     VkPipelineLayout pipelineLayout;
+    VkPipelineLayout computePipelineLayout;
     VkPipeline graphicsTrianglePipeline;
     VkPipeline graphicsPointPipeline;
+    VkPipeline computePipeline;
 
     VkCommandPool commandPool;
+    VkCommandPool computeCommandPool;
 
     VkImage depthImage;
     VkDeviceMemory depthImageMemory;
     VkImageView depthImageView; 
     VkFormat depthFormat;
+    VkSampler depthSampler;
 
     VkImage textureImage;
     VkDeviceMemory textureImageMemory;
@@ -380,6 +471,8 @@ private:
     bool depthBufferCopied = false;
     VkBuffer pointVertexBuffer;
     VkDeviceMemory pointVertexBufferMemory;
+    VkBuffer resultBuffer;
+    VkDeviceMemory resultBufferMemory;
 
     std::vector<VkBuffer> uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
@@ -387,8 +480,10 @@ private:
 
     VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
+    std::vector<VkDescriptorSet> computeDescriptorSets;
 
     std::vector<VkCommandBuffer> commandBuffers;
+    std::vector<VkCommandBuffer> computeCommandBuffers;
 
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
@@ -396,6 +491,9 @@ private:
     uint32_t currentFrame = 0;
 
     bool framebufferResized = false;
+
+    //Used to create the output file of ninary representing the occluded points
+    int file_index = 0;
 
     void initWindow() {
         glfwInit();
@@ -422,10 +520,13 @@ private:
         createImageViews();
         createRenderPass();
         createDescriptorSetLayout();
+        createComputeDescriptorSetLayout();
         createGraphicsTrianglePipeline();
         createGraphicsPointPipeline();
+        createComputePipeline();
         createCommandPool();
         createDepthResources();
+        createDepthSampler();
         createFramebuffers();
         createTextureImage();
         createTextureImageView();
@@ -433,21 +534,42 @@ private:
         createVertexBuffer();
         createIndexBuffer();
         createPointVertexBuffer();
+        createOccludedResultBuffer();
         createStagingBuffer();
         createUniformBuffers();
         createDescriptorPool();
         createDescriptorSets();
+        createComputeDescriptorSets();
         createCommandBuffers();
         createSyncObjects();
     }
 
     void mainLoop() {
-        testSceneOccludedDirectAlgorithm();
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
             drawFrame();
+
+            //Take another patch of surface and update the buffers
+            if (CURRENT_INDEX_SURFACE < N_SURFACES) {
+                //testSceneOccludedDirectAlgorithm();
+
+                CURRENT_INDEX_SURFACE++;
+                std::string matlabOutputSurface = execMATLAB(matlabCommandSurfaceIndex(CURRENT_INDEX_SURFACE).c_str());
+                std::pair<std::vector<Vertex>, std::vector<uint16_t>> resultSurf = parseSurfaces(matlabOutputSurface);
+
+                //Buffer that stores surfaces vertex
+                vertices = resultSurf.first;
+                indices = resultSurf.second;
+
+                updateVertexBuffer();
+                updateIndexBuffer();
+
+                //std::cout << vertices[1].pos.x << "\n";
+                //std::cout << vertices.size() << "\n";
+                //std::cout << CURRENT_INDEX_SURFACE << "\n";
+            }
         }
-        //testPointDepth();
+
         vkDeviceWaitIdle(device);
     }
 
@@ -472,7 +594,10 @@ private:
 
         vkDestroyPipeline(device, graphicsTrianglePipeline, nullptr);
         vkDestroyPipeline(device, graphicsPointPipeline, nullptr);
+        vkDestroyPipeline(device, computePipeline, nullptr);
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+        vkDestroyPipelineLayout(device, computePipelineLayout, nullptr);
+
         vkDestroyRenderPass(device, renderPass, nullptr);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -490,11 +615,24 @@ private:
 
         vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
+        //Buffers
         vkDestroyBuffer(device, indexBuffer, nullptr);
         vkFreeMemory(device, indexBufferMemory, nullptr);
 
         vkDestroyBuffer(device, vertexBuffer, nullptr);
         vkFreeMemory(device, vertexBufferMemory, nullptr);
+
+        vkDestroyBuffer(device, pointVertexBuffer, nullptr);
+        vkFreeMemory(device, pointVertexBufferMemory, nullptr);
+
+        vkDestroyBuffer(device, resultBuffer, nullptr);
+        vkFreeMemory(device, resultBufferMemory, nullptr);
+
+        // Liberar o sampler e a imagem de profundidade
+        vkDestroySampler(device, depthSampler, nullptr);
+        vkDestroyImageView(device, depthImageView, nullptr);
+        vkDestroyImage(device, depthImage, nullptr);
+        vkFreeMemory(device, depthImageMemory, nullptr);
 
         cleanupStagingBuffer();
 
@@ -505,6 +643,7 @@ private:
         }
 
         vkDestroyCommandPool(device, commandPool, nullptr);
+        vkDestroyCommandPool(device, computeCommandPool, nullptr);
 
         vkDestroyDevice(device, nullptr);
 
@@ -576,6 +715,7 @@ private:
         if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
             throw std::runtime_error("failed to create instance!");
         }
+
     }
 
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
@@ -614,7 +754,13 @@ private:
         std::vector<VkPhysicalDevice> devices(deviceCount);
         vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
+        std::cout << "Found " << deviceCount << " GPU(s) with Vulkan support.\n";
+
         for (const auto& device : devices) {
+            VkPhysicalDeviceProperties deviceProperties;
+            vkGetPhysicalDeviceProperties(device, &deviceProperties);
+            std::cout << "GPU Name: " << deviceProperties.deviceName << "\n";
+
             if (isDeviceSuitable(device)) {
                 physicalDevice = device;
                 break;
@@ -670,6 +816,7 @@ private:
 
         vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
         vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
+        vkGetDeviceQueue(device, indices.computeFamily.value(), 0, &computeQueue);
     }
 
     void createSwapChain() {
@@ -732,6 +879,7 @@ private:
         }
     }
 
+    //Render Pass
     void createRenderPass() {
         VkAttachmentDescription colorAttachment{};
         colorAttachment.format = swapChainImageFormat;
@@ -790,6 +938,7 @@ private:
         }
     }
 
+    //Create Descriptor Set Layout
     void createDescriptorSetLayout() {
         VkDescriptorSetLayoutBinding uboLayoutBinding{};
         uboLayoutBinding.binding = 0;
@@ -816,6 +965,107 @@ private:
         }
     }
 
+    void createComputeDescriptorSetLayout() {
+        std::array<VkDescriptorSetLayoutBinding, 4> bindings{};
+
+        // Binding 0: Uniform Buffer Object (UBO)
+        bindings[0].binding = 0;
+        bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        bindings[0].descriptorCount = 1;
+        bindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;  // Corrigido para COMPUTE
+        bindings[0].pImmutableSamplers = nullptr;
+
+        // Binding 1: Buffer de Pontos
+        bindings[1].binding = 1;
+        bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        bindings[1].descriptorCount = 1;
+        bindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;  // Corrigido para COMPUTE
+        bindings[1].pImmutableSamplers = nullptr;
+
+        // Binding 2: Depth Buffer (imagem 2D)
+        bindings[2].binding = 2;
+        bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        bindings[2].descriptorCount = 1;
+        bindings[2].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;  // Corrigido para COMPUTE
+        bindings[2].pImmutableSamplers = nullptr;
+
+        // Binding 3: Buffer de Resultados de Oclusão
+        bindings[3].binding = 3;
+        bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        bindings[3].descriptorCount = 1;
+        bindings[3].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;  // Corrigido para COMPUTE
+        bindings[3].pImmutableSamplers = nullptr;
+
+        VkDescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+        layoutInfo.pBindings = bindings.data();
+
+        if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &computeDescriptorSetLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create descriptor set layout for compute shader!");
+        }
+    }
+
+
+    void updateComputeDescriptorSet(VkDescriptorSet descriptorSet, VkBuffer uniformBuffer, VkBuffer pointsBuffer, VkImageView depthImageView, VkSampler depthSampler, VkBuffer resultsBuffer) {
+        std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
+
+        // Binding 0: Uniform Buffer Object (UBO)
+        VkDescriptorBufferInfo uboBufferInfo{};
+        uboBufferInfo.buffer = uniformBuffer;
+        uboBufferInfo.offset = 0;
+        uboBufferInfo.range = sizeof(UniformBufferObject);
+
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = computeDescriptorSets[currentFrame];;
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pBufferInfo = &uboBufferInfo;
+
+        // Binding 1: Buffer de Pontos
+        VkDescriptorBufferInfo pointsBufferInfo{};
+        pointsBufferInfo.buffer = pointsBuffer;
+        pointsBufferInfo.offset = 0;
+        pointsBufferInfo.range = VK_WHOLE_SIZE;
+
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet = computeDescriptorSets[currentFrame];;
+        descriptorWrites[1].dstBinding = 1;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pBufferInfo = &pointsBufferInfo;
+
+        // Binding 2: Depth Buffer como imagem
+        VkDescriptorImageInfo depthImageInfo{};
+        depthImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        depthImageInfo.imageView = depthImageView;
+        depthImageInfo.sampler = depthSampler;
+
+        descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[2].dstSet = computeDescriptorSets[currentFrame];;
+        descriptorWrites[2].dstBinding = 2;
+        descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[2].descriptorCount = 1;
+        descriptorWrites[2].pImageInfo = &depthImageInfo;
+
+        // Binding 3: Buffer de Resultados de Oclusão
+        VkDescriptorBufferInfo resultsBufferInfo{};
+        resultsBufferInfo.buffer = resultsBuffer;
+        resultsBufferInfo.offset = 0;
+        resultsBufferInfo.range = VK_WHOLE_SIZE;
+
+        descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[3].dstSet = computeDescriptorSets[currentFrame];;
+        descriptorWrites[3].dstBinding = 3;
+        descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptorWrites[3].descriptorCount = 1;
+        descriptorWrites[3].pBufferInfo = &resultsBufferInfo;
+
+        vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+    }
+
+    //Create Pipelines
     void createGraphicsTrianglePipeline() {
         auto vertShaderCode = readFile("shaders/vert.spv");
         auto fragShaderCode = readFile("shaders/frag.spv");
@@ -864,7 +1114,7 @@ private:
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+        rasterizer.cullMode = VK_CULL_MODE_NONE; // VK_CULL_MODE_NONE VK_CULL_MODE_BACK_BIT
         rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rasterizer.depthBiasEnable = VK_FALSE;
 
@@ -987,7 +1237,7 @@ private:
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer.lineWidth = 1.0f;
-        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+        rasterizer.cullMode = VK_CULL_MODE_NONE; // VK_CULL_MODE_NONE VK_CULL_MODE_BACK_BIT
         rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rasterizer.depthBiasEnable = VK_FALSE;
 
@@ -1062,6 +1312,42 @@ private:
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
     }
 
+    void createComputePipeline() {
+        // 1. Carregar o shader de computação
+        auto computeShaderCode = readFile("shaders/compute_shader.spv");
+        VkShaderModule computeShaderModule = createShaderModule(computeShaderCode);
+
+        // 2. Definir o estágio do shader de computação
+        VkPipelineShaderStageCreateInfo shaderStageInfo{};
+        shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        shaderStageInfo.module = computeShaderModule;
+        shaderStageInfo.pName = "main";  // Nome da função de entrada no shader
+
+        // 3. Criar o layout do pipeline de computação usando o mesmo descriptor set layout
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.setLayoutCount = 1;  // Número de descritores que você usará
+        pipelineLayoutInfo.pSetLayouts = &computeDescriptorSetLayout;  // O layout criado anteriormente
+
+        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &computePipelineLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create compute pipeline layout!");
+        }
+
+        // 4. Criar o compute pipeline
+        VkComputePipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        pipelineInfo.stage = shaderStageInfo;
+        pipelineInfo.layout = computePipelineLayout;  // Use o novo layout criado para o compute shader
+
+        if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &computePipeline) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create compute pipeline!");
+        }
+
+        // 5. Destruir o módulo de shader após criar o pipeline
+        vkDestroyShaderModule(device, computeShaderModule, nullptr);
+    }
+
     void createFramebuffers() {
         swapChainFramebuffers.resize(swapChainImageViews.size());
 
@@ -1095,6 +1381,15 @@ private:
         poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
 
         if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create graphics command pool!");
+        }
+
+        VkCommandPoolCreateInfo computePoolInfo{};
+        computePoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        computePoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+        computePoolInfo.queueFamilyIndex = queueFamilyIndices.computeFamily.value();
+
+        if (vkCreateCommandPool(device, &computePoolInfo, nullptr, &computeCommandPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create graphics command pool!");
         }
     }
@@ -1145,6 +1440,30 @@ private:
         depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 
         transitionImageLayout(depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    }
+
+    void createDepthSampler() {
+        VkSamplerCreateInfo samplerInfo{};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;  // Filtro de magnificação
+        samplerInfo.minFilter = VK_FILTER_LINEAR;  // Filtro de minificação
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.maxAnisotropy = 1.0f;
+        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        samplerInfo.mipLodBias = 0.0f;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.maxLod = 0.0f;
+
+        if (vkCreateSampler(device, &samplerInfo, nullptr, &depthSampler) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create depth sampler!");
+        }
     }
 
     VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
@@ -1203,6 +1522,7 @@ private:
 
         vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
+        std::cout << "Transição para TRANSFER_SRC_OPTIMAL" << std::endl;
         // Transition the depth image layout to transfer src
         transitionImageLayout(depthImage, VK_FORMAT_D32_SFLOAT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
@@ -1218,8 +1538,10 @@ private:
         region.imageOffset = { 0, 0, 0 };
         region.imageExtent = { swapChainExtent.width, swapChainExtent.height, 1 };
 
+
         vkCmdCopyImageToBuffer(commandBuffer, depthImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, stagingBuffer, 1, &region);
 
+        std::cout << "Transição para DEPTH_STENCIL_ATTACHMENT_OPTIMAL" << std::endl;
         // Transition the depth image layout back to its original layout
         transitionImageLayout(depthImage, VK_FORMAT_D32_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
@@ -1268,7 +1590,7 @@ private:
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
         VkImageSubresourceLayers subresource = {};
-        subresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        subresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT; //VK_IMAGE_ASPECT_COLOR_BIT; // VK_IMAGE_ASPECT_DEPTH_BIT;
         subresource.mipLevel = 0;
         subresource.baseArrayLayer = 0;
         subresource.layerCount = 1;
@@ -1443,12 +1765,12 @@ private:
             barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
             barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
-            sourceStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+            sourceStage = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
             destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         }
         else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
             barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
             sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
@@ -1507,6 +1829,7 @@ private:
         endSingleTimeCommands(commandBuffer);
     }
 
+    //Create Buffers
     void createVertexBuffer() {
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
@@ -1566,6 +1889,66 @@ private:
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
+    
+    void createOccludedResultBuffer() {
+
+        VkDeviceSize bufferSize = sizeof(int) * pointVertices.size();  // Tamanho do buffer baseado no número de pontos
+
+        createBuffer(bufferSize,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,  // Para usar no compute shader
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,  // Mapeável para a CPU
+            resultBuffer,
+            resultBufferMemory);
+    }
+
+    //Update Buffers
+    void updateVertexBuffer() {
+        VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+
+        // Criar staging buffer
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuffer, stagingBufferMemory);
+
+        // Mapear a memória e copiar os novos dados de vértices para o staging buffer
+        void* data;
+        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        memcpy(data, vertices.data(), (size_t)bufferSize);
+        vkUnmapMemory(device, stagingBufferMemory);
+
+        // Copiar os dados do staging buffer para o buffer de vértices na GPU
+        copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+
+        // Destruir o staging buffer e liberar sua memória
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingBufferMemory, nullptr);
+    }
+
+    void updateIndexBuffer() {
+        VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+        // Criar staging buffer
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuffer, stagingBufferMemory);
+
+        // Mapear a memória e copiar os novos dados de índices para o staging buffer
+        void* data;
+        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        memcpy(data, indices.data(), (size_t)bufferSize);
+        vkUnmapMemory(device, stagingBufferMemory);
+
+        // Copiar os dados do staging buffer para o buffer de índices na GPU
+        copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+
+        // Destruir o staging buffer e liberar sua memória
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingBufferMemory, nullptr);
+    }
 
     void createUniformBuffers() {
         VkDeviceSize bufferSize = sizeof(UniformBufferObject);
@@ -1582,17 +1965,22 @@ private:
     }
 
     void createDescriptorPool() {
-        std::array<VkDescriptorPoolSize, 2> poolSizes{};
+        std::array<VkDescriptorPoolSize, 3> poolSizes{};
+
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-        poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        poolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT * 2;  // Para gráficos e computação
+
+        poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        poolSizes[1].descriptorCount = 2 * MAX_FRAMES_IN_FLIGHT * 2;  // Para gráficos e computação
+
+        poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        poolSizes[2].descriptorCount = MAX_FRAMES_IN_FLIGHT * 2;  // Para gráficos e computação
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        poolInfo.maxSets = MAX_FRAMES_IN_FLIGHT * 2;  // Ajuste para comportar ambos os pipelines
 
         if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor pool!");
@@ -1645,6 +2033,79 @@ private:
         }
     }
 
+    void createComputeDescriptorSets() {
+        // Criação de N descriptor sets, um para cada frame em flight
+        std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, computeDescriptorSetLayout);
+
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = descriptorPool;  // Certifique-se de ter criado um pool de descritores
+        allocInfo.descriptorSetCount = static_cast<uint32_t>(layouts.size());
+        allocInfo.pSetLayouts = layouts.data();
+
+        computeDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+        if (vkAllocateDescriptorSets(device, &allocInfo, computeDescriptorSets.data()) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate compute descriptor sets!");
+        }
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            VkDescriptorBufferInfo uboBufferInfo{};
+            uboBufferInfo.buffer = uniformBuffers[i];
+            uboBufferInfo.offset = 0;
+            uboBufferInfo.range = sizeof(UniformBufferObject);
+
+            VkDescriptorBufferInfo pointsBufferInfo{};
+            pointsBufferInfo.buffer = pointVertexBuffer;
+            pointsBufferInfo.offset = 0;
+            pointsBufferInfo.range = VK_WHOLE_SIZE;
+
+            VkDescriptorImageInfo depthImageInfo{};
+            depthImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            depthImageInfo.imageView = depthImageView;
+            depthImageInfo.sampler = depthSampler;
+
+            std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
+
+            // Binding 0: Uniform Buffer (UBO)
+            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[0].dstSet = computeDescriptorSets[i];
+            descriptorWrites[0].dstBinding = 0;
+            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrites[0].descriptorCount = 1;
+            descriptorWrites[0].pBufferInfo = &uboBufferInfo;
+
+            // Binding 1: Buffer de Pontos
+            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[1].dstSet = computeDescriptorSets[i];
+            descriptorWrites[1].dstBinding = 1;
+            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[1].descriptorCount = 1;
+            descriptorWrites[1].pBufferInfo = &pointsBufferInfo;
+
+            // Binding 2: Depth Buffer
+            descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[2].dstSet = computeDescriptorSets[i];
+            descriptorWrites[2].dstBinding = 2;
+            descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[2].descriptorCount = 1;
+            descriptorWrites[2].pImageInfo = &depthImageInfo;
+
+            VkDescriptorBufferInfo resultsBufferInfo{};
+            resultsBufferInfo.buffer = resultBuffer;
+            resultsBufferInfo.offset = 0;
+            resultsBufferInfo.range = VK_WHOLE_SIZE;
+
+            descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[3].dstSet = computeDescriptorSets[i];
+            descriptorWrites[3].dstBinding = 3;
+            descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[3].descriptorCount = 1;
+            descriptorWrites[3].pBufferInfo = &resultsBufferInfo;
+
+            vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+        }
+    }
+
     void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
         VkBufferCreateInfo bufferInfo{};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1658,9 +2119,14 @@ private:
 
         VkMemoryRequirements memRequirements;
         vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
+        /*std::cout << "Memory Requirements: Size=" << memRequirements.size
+            << ", Alignment=" << memRequirements.alignment
+            << ", Memory Type Bits=" << memRequirements.memoryTypeBits << std::endl;*/
 
         VkMemoryAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+
+
         allocInfo.allocationSize = memRequirements.size;
         allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
 
@@ -1740,6 +2206,18 @@ private:
 
         if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate command buffers!");
+        }
+
+        computeCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+
+        VkCommandBufferAllocateInfo computeAllocInfo{};
+        computeAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        computeAllocInfo.commandPool = computeCommandPool;  // Certifique-se de que tem um command pool para compute
+        computeAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        computeAllocInfo.commandBufferCount = static_cast<uint32_t>(computeCommandBuffers.size());
+
+        if (vkAllocateCommandBuffers(device, &computeAllocInfo, computeCommandBuffers.data()) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate compute command buffers!");
         }
     }
 
@@ -1845,41 +2323,116 @@ private:
 
     UniformBufferObject initUbo(UniformBufferObject ubo) {   
         ubo.model = glm::mat4(1.0f);
+        //ubo.model[1][1] *= -1;
 
-        std::vector<std::vector<float>> K = {
-            { 2, 0, 400 },   // Fator de escala em x (focal length), centro da câmera em x = 400 (meio de uma janela 800x600)
-            { 0, 3, 300 },   // Fator de escala em y (focal length), centro da câmera em y = 300
-            { 0, 0, 1 }
-        };
+        //std::vector<std::vector<float>> K = {
+        //    { 2, 0, 400 },   // Fator de escala em x (focal length), centro da câmera em x = 400 (meio de uma janela 800x600)
+        //    { 0, 3, 300 },   // Fator de escala em y (focal length), centro da câmera em y = 300
+        //    { 0, 0, 1 }
+        //};
 
-        std::vector<std::vector<float>> R = {
-            { 1, 0, 0 },   // Matriz identidade (nenhuma rotação)
-            { 0, -1, 0 },  // Inversão no eixo Y
-            { 0, 0, 1 } 
-        };
+        //std::vector<std::vector<float>> R = {
+        //    { 1,  0,  0 },
+        //    { 0, -1,  0 },  // Inversão no eixo Y
+        //    { 0,  0,  1 }
+        //};
 
-        std::vector<float> t = { 0.0f, 0.0f, 5.0f };  // Translação da câmera
+        //std::vector<float> t = { 0.0f, 0.0f, 5.0f };  // Translação da câmera
 
+        //Camera from matlab
+        //std::vector<std::vector<float>> K = {
+        //    {2917.9f, 0.0f,    800.f},   // Fator de escala em x (focal length), centro da câmera em x = 400 (meio de uma janela 800x600)
+        //    { 0.0f,   2917.9f, 600.f},   // Fator de escala em y (focal length), centro da câmera em y = 300
+        //    { 0.0f,   0.0f,    1.0f }
+        //};
 
+        //std::vector<std::vector<float>> R = {
+        //    { 0.3136,  0.0239, -0.9492},
+        //    { -0.2881, 0.9550, -0.0711 },  // Inversão no eixo Y
+        //    { 0.9048,  0.2958 , 0.3064 }
+        //};
 
-        ubo.view = glm::mat4(
-            glm::vec4(R[0][0], R[1][0], R[2][0], 0.0f),  // Primeira coluna da matriz
-            glm::vec4(R[0][1], R[1][1], R[2][1], 0.0f),  // Segunda coluna
-            glm::vec4(R[0][2], R[1][2], R[2][2], 0.0f),  // Terceira coluna
-            glm::vec4(-t[0], -t[1], -t[2], 1.0f)         // Vetor de translação
+        //R espelhada
+        /*std::vector<std::vector<float>> R = {
+            { -0.9492,  0.0239, 0.3136},
+            { -0.0711, 0.9550, -0.2881 },
+            { 0.3064,  0.2958 , 0.9048 }
+        };*/
+
+        //std::vector<float> t = { -5.1092f, -2.2337f, 7.5941f };  // Translação da câmera
+        //std::vector<float> t = { -5.912186f, 0.008942f, - 7.335489f }; //C_t = -R' * t
+
+        Camera& firstCamera = cameras[0];
+
+        // Imprime as matrizes e o vetor de translação da primeira câmera
+        /*printMatrix(firstCamera.K, "Primeira Camera Intrinsics (K matlab)");
+        printMatrix(firstCamera.R, "Primeira Camera Rotation (R matlab)");
+        printVector(firstCamera.T, "Primeira Camera Translation (T matlab)");*/
+
+        // Construindo a matriz de rotação a partir de R (transposta necessária para Vulkan)
+        glm::mat3 R = glm::mat3(
+            glm::vec3(firstCamera.R[0][0], firstCamera.R[0][1], firstCamera.R[0][2]),
+            glm::vec3(firstCamera.R[1][0], firstCamera.R[1][1], firstCamera.R[1][2]),
+            glm::vec3(firstCamera.R[2][0], firstCamera.R[2][1], firstCamera.R[2][2])
         );
 
-        static float zNear = 0.1f;
-        static float zFar = 100.0f;
-        static float width = static_cast<float>(swapChainExtent.width);
-        static float height = static_cast<float>(swapChainExtent.height);
+        /*R = glm::mat4(1.0f);
+        R[1][1] *= -1;
+        R[0][0] *= -1;*/
 
+        // Corrigindo a translação usando a matriz de rotação transposta
+        /*glm::vec3 t = -glm::transpose(R) * firstCamera.T;
+        printVector(t, "C_t (matlab)");*/
+
+        //t = glm::vec3(firstCamera.T[0], firstCamera.T[1], firstCamera.T[2]);
+
+        // Matriz intrínseca da câmera (K)
+        glm::mat3 K = glm::mat3(
+            glm::vec3(firstCamera.K[0][0], firstCamera.K[0][1], firstCamera.K[0][2]),
+            glm::vec3(firstCamera.K[1][0], firstCamera.K[1][1], firstCamera.K[1][2]),
+            glm::vec3(firstCamera.K[2][0], firstCamera.K[2][1], firstCamera.K[2][2])
+        );
+
+        /*printMatrix(K, "Primeira Camera Intrinsics (K Vulkan)");
+        printMatrix(R, "Primeira Camera Rotation (R Vulkan)");*/
+
+        // Montando a matriz de visão (R e t)
+        /*ubo.view = glm::mat4(
+            glm::vec4(-R[0][0], -R[0][1], -R[0][2], 0.0f),  
+            glm::vec4(-R[1][0], -R[1][1], -R[1][2], 0.0f),  
+            glm::vec4(R[2][0], R[2][1], R[2][2], 0.0f), 
+            glm::vec4(t[0], t[1], t[2], 1.0f)            
+        );*/
+
+        glm::vec3 C_t = -glm::transpose(R) * firstCamera.T;
+        glm::vec3 direction = glm::normalize(glm::vec3(firstCamera.R[0][2], firstCamera.R[1][2], firstCamera.R[2][2]));
+        glm::vec3 up = glm::normalize(-glm::vec3(firstCamera.R[0][1], firstCamera.R[1][1], firstCamera.R[2][1]));
+        ubo.view = glm::lookAt(C_t, C_t + direction, up);
+
+        // Parâmetros de clipping e dimensão da janela
+        static float zNear = 0.1f;
+        static float zFar = 1000.0f;
+        static float width = WIDTH;
+        static float height = HEIGHT;
+
+        /*static float width = static_cast<float>(swapChainExtent.width);
+        static float height = static_cast<float>(swapChainExtent.height);*/
+
+        //static float width = static_cast<float>(swapChainExtent.width);
+        //static float height = static_cast<float>(swapChainExtent.height);
+
+        //std::cout << height << " " << width << "\n";
+
+        // Matriz de projeção
         ubo.proj = glm::mat4(
-            glm::vec4(2 * K[0][0], 0.0f, 0.0f, 0.0f),
-            glm::vec4(0.0f, -2 * K[1][1], 0.0f, 0.0f),
-            glm::vec4(2 * K[0][2] / width - 1, 2 * K[1][2] / height - 1, zFar / (zNear - zFar), -1.0f),                
+            glm::vec4(2 * K[0][0]/width, 0.0f, 0.0f, 0.0f),
+            glm::vec4(0.0f, -2 * K[1][1]/height, 0.0f, 0.0f),
+            glm::vec4(2 * K[2][0] / width - 1, 2 * K[2][1] / height - 1, zFar / (zNear - zFar), -1.0f),
             glm::vec4(0.0f, 0.0f, zFar * zNear / (zNear - zFar), 0.0f)
         );
+
+        //printMatrix(ubo.view, "View Vulkan");
+        //printMatrix(ubo.proj, "Proj Vulkan");
 
         return ubo;
     }
@@ -1891,39 +2444,39 @@ private:
 
         auto start = std::chrono::high_resolution_clock::now();
 
-        for (size_t i = 0; i < vertices.size(); ++i) {
-            glm::vec3 point = vertices[i].pos;
+        for (size_t i = 0; i < pointVertices.size(); ++i) {
+            glm::vec3 point = pointVertices[i].pos;
             for (size_t j = 0; j < indices.size(); j += 3) {
                 int id0 = indices[j];
                 int id1 = indices[j + 1];
                 int id2 = indices[j + 2];
 
-                if (i != id0 && i != id1 && i != id2) {
-                    glm::vec3 v0 = vertices[id0].pos;
-                    glm::vec3 v1 = vertices[id1].pos;
-                    glm::vec3 v2 = vertices[id2].pos;
+                glm::vec3 v0 = vertices[id0].pos;
+                glm::vec3 v1 = vertices[id1].pos;
+                glm::vec3 v2 = vertices[id2].pos;
 
-                    bool isOccluded = isPointOccludedByTriangle(point, ubo.model, ubo.view, ubo.proj, v0, v1, v2);
+                bool isOccluded = isPointOccludedByTriangle(point, ubo.model, ubo.view, ubo.proj, v0, v1, v2);
 
-                    if (isOccluded) {
-                        std::cout << "Point " << i << " is occluded by triangle (" << id0 << ", " << id1 << ", " << id2 << ")." << "\n";
-                    }
-                    else {
-                        std::cout << "Point " << i << " is NOT occluded by triangle (" << id0 << ", " << id1 << ", " << id2 << ")." << "\n";
-                    }
-                    count++;
+                /*if (isOccluded) {
+                    std::cout << "Point " << i << " is occluded by triangle (" << id0 << ", " << id1 << ", " << id2 << ")." << "\n";
                 }
+                else {
+                    std::cout << "Point " << i << " is NOT occluded by triangle (" << id0 << ", " << id1 << ", " << id2 << ")." << "\n";
+                }*/
+                count++;
             }
         }
 
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
-        std::cout << "Execution time: " << elapsed.count() << " seconds, with " << count << " tests." << "\n";
+        std::cout << "Execution time Direct Algorithm: " << elapsed.count() << " seconds, with " << count << " tests." << "\n\n";
     }
 
     void drawFrame() {
+        // Esperar o frame anterior terminar
         vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
+        // Adquirir a próxima imagem da swap chain
         uint32_t imageIndex;
         VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
@@ -1935,13 +2488,17 @@ private:
             throw std::runtime_error("failed to acquire swap chain image!");
         }
 
+        // Atualizar o uniform buffer para o frame atual
         updateUniformBuffer(currentFrame);
 
+        // Resetar o fence do frame atual
         vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
-        vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
+        // Resetar o command buffer e gravar novos comandos (renderização)
+        vkResetCommandBuffer(commandBuffers[currentFrame], 0);
         recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
+        // Submeter o command buffer à fila gráfica
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
@@ -1962,6 +2519,20 @@ private:
             throw std::runtime_error("failed to submit draw command buffer!");
         }
 
+        // Esperar pela conclusão da renderização antes de copiar o depth buffer
+        vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+
+        // Copiar o depth buffer para o staging buffer
+        auto start = std::chrono::high_resolution_clock::now();
+        copyDepthBufferToStagingBuffer();
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = end - start;
+        std::cout << "Copying the depth buffer takes " << elapsed.count() << " seconds" << "\n";
+
+        // Executar o compute shader após a cópia do depth buffer
+        runComputeShader();  // Vamos implementar isso abaixo
+
+        // Apresentar a imagem na tela
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
         presentInfo.waitSemaphoreCount = 1;
@@ -1972,12 +2543,6 @@ private:
         presentInfo.pSwapchains = swapChains;
         presentInfo.pImageIndices = &imageIndex;
 
-
-        /*if (!depthBufferCopied) {
-            copyDepthBufferToStagingBuffer();
-            depthBufferCopied = true;
-        }*/
-   
         result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
@@ -1988,15 +2553,45 @@ private:
             throw std::runtime_error("failed to present swap chain image!");
         }
 
-        vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
-
-        if (!depthBufferCopied) {
-            copyDepthBufferToStagingBuffer();
-            depthBufferCopied = true;
-        }
+        // Testar o ponto de profundidade, se necessário
         testPointDepth();
 
+        // Atualizar o frame atual
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+    }
+
+    void runComputeShader() {
+        // Resetar o command buffer de computação (se necessário)
+        vkResetCommandBuffer(computeCommandBuffers[currentFrame], 0);
+
+        // Começar a gravar no command buffer de computação
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+        vkBeginCommandBuffer(computeCommandBuffers[currentFrame], &beginInfo);
+
+        // Vincular o pipeline de computação e os descriptor sets
+        vkCmdBindPipeline(computeCommandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
+        vkCmdBindDescriptorSets(computeCommandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeDescriptorSets[currentFrame], 0, nullptr);
+
+        size_t numPoints = pointVertices.size();
+        int numWorkGroupsX = (numPoints + 63) / 64;
+        int numWorkGroupsY = 1;
+
+        // Executar o compute shader
+        vkCmdDispatch(computeCommandBuffers[currentFrame], numWorkGroupsX, numWorkGroupsY, 1);
+
+        // Finalizar o command buffer de computação
+        vkEndCommandBuffer(computeCommandBuffers[currentFrame]);
+
+        // Submeter o command buffer de computação à fila de computação
+        VkSubmitInfo submitInfo{};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &computeCommandBuffers[currentFrame];
+
+        vkQueueSubmit(computeQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(computeQueue);  // Espera a execução do compute shader finalizar
     }
 
     void testPointDepth() {
@@ -2005,81 +2600,104 @@ private:
         //==================================
         UniformBufferObject _ubo{};
         _ubo = initUbo(_ubo);
-        //int count = 0;
+        int count = 0;
+        std::cout << std::fixed << std::setprecision(10);
+        int isOccluded = 0;
 
-        //auto start = std::chrono::high_resolution_clock::now();
+        //std::cout << currentFrame << "\n";
+        std::ofstream outputFile("output_occlusion/occlusion_output_frame_" + std::to_string(file_index) + ".txt");
 
-        glm::vec3 vertex = vertices[1].pos;
+        if (!outputFile.is_open()) {
+            std::cerr << "Não foi possível abrir o arquivo para escrita!\n";
+            return;
+        }
 
-        // Transform the vertex position into clip space 
-        glm::vec4 vertexPos = glm::vec4(vertex, 1.0f);
+        auto start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < pointVertices.size(); i++) {
+            isOccluded = 0;
+            glm::vec3 vertex = pointVertices[i].pos;
 
-        glm::vec4 view = _ubo.view * _ubo.model * vertexPos;
-        glm::vec4 clip = _ubo.proj * view;
+            // Transform the vertex position into clip space 
+            glm::vec4 vertexPos = glm::vec4(vertex, 1.0f);
 
-        // Espaço de coordenadas normalizadas (NDC)
-        glm::vec3 ndc = glm::vec3(clip) / clip.w;
+            glm::vec4 view = _ubo.view * _ubo.model * vertexPos;
+            glm::vec4 clip = _ubo.proj * view;
 
-        // Converte coordenadas NDC para coordenadas de tela (x e y, variando de -1 a 1)
-        int x = static_cast<int>((ndc.x * 0.5f + 0.5f) * swapChainExtent.width);
-        int y = static_cast<int>((ndc.y * 0.5f + 0.5f) * swapChainExtent.height);
+            // Espaço de coordenadas normalizadas (NDC)
+            glm::vec3 ndc = glm::vec3(clip) / clip.w;
 
-        // Fetch the depth value at this screen position
-        float depthValue = getDepthValueAtCoord(x, y);
+            // Converte coordenadas NDC para coordenadas de tela (x e y, variando de -1 a 1)
+            int x = static_cast<int>((ndc.x * 0.5f + 0.5f) * swapChainExtent.width);
+            int y = static_cast<int>((ndc.y * 0.5f + 0.5f) * swapChainExtent.height);
 
-        glm::mat4 MVP = _ubo.proj * _ubo.view * _ubo.model;
+            // Fetch the depth value at this screen position
+            float depthValue = getDepthValueAtCoord(x, y);
 
-        std::cout << "View Matriz:" << "\n";
-        for (int i = 0; i < 4; i++) {
-            for (int j = 0; j < 4; j++) {
-                std::cout << _ubo.view[i][j] << " ";
+            //std::cout << i << ": " << ndc.z - depthValue << "\n";
+
+            if (ndc.z - depthValue > 0.00002) {
+                isOccluded = 1;
             }
-            std::cout << "\n\n";
-        }
 
-        std::cout << "Projection Matriz:" << "\n";
-        for (int i = 0; i < 4; i++) {
-            for (int j = 0; j < 4; j++) {
-                std::cout << _ubo.proj[i][j] << " ";
+            outputFile << isOccluded << "\n";
+            //glm::mat4 MVP = _ubo.proj * _ubo.view * _ubo.model;
+
+            /*std::cout << "View Matriz:" << "\n";
+            for (int i = 0; i < 4; i++) {
+                for (int j = 0; j < 4; j++) {
+                    std::cout << _ubo.view[i][j] << " ";
+                }
+                std::cout << "\n\n";
             }
-            std::cout << "\n\n";
+
+            std::cout << "Projection Matriz:" << "\n";
+            for (int i = 0; i < 4; i++) {
+                for (int j = 0; j < 4; j++) {
+                    std::cout << _ubo.proj[i][j] << " ";
+                }
+                std::cout << "\n\n";
+            }*/
+
+            /*std::cout << "MVP Matriz:" << "\n";
+            for (int i = 0; i < 4; i++) {
+                for (int j = 0; j < 4; j++) {
+                    std::cout << MVP[i][j] << " ";
+                }
+                std::cout << "\n\n";
+            }*/
+
+
+            /*for (size_t i = 0; i < vertices.size(); ++i) {
+                glm::vec4 clipSpacePoint = _ubo.proj * _ubo.view * glm::vec4(vertices[i].pos, 1.0f);
+                glm::vec3 ndc = glm::vec3(clipSpacePoint) / clipSpacePoint.w;
+
+                std::cout << "Vertice " << i << ": NDC: " << ndc.x << ", " << ndc.y << ", " << ndc.z << "\n";
+            }*/
+
+            // Imprime os valores para comparação
+            /*std::cout << std::fixed << std::setprecision(8);
+            std::cout << "Vertex Position: (" << vertex.x << ", " << vertex.y << ", " << vertex.z << ")\n";
+            std::cout << "view: " << view.x << ", " << view.y << ", " << view.z << ", " << view.w << "\n";
+            std::cout << "clip: " << clip.x << ", " << clip.y << ", " << clip.z << ", " << clip.w << "\n";
+            std::cout << "ndc: " << ndc.x << ", " << ndc.y << ", " << ndc.z << "\n";
+            std::cout << "Screen Coordinates: x = " << x << ", y = " << y << "\n";
+            std::cout << "Depth Value from Depth Buffer: " << depthValue << "\n\n";*/
+            count++;
         }
-
-        std::cout << "MVP Matriz:" << "\n";
-        for (int i = 0; i < 4; i++) {
-            for (int j = 0; j < 4; j++) {
-                std::cout << MVP[i][j] << " ";
-            }
-            std::cout << "\n\n";
-        }
-
-
-        for (size_t i = 0; i < vertices.size(); ++i) {
-            glm::vec4 clipSpacePoint = _ubo.proj * _ubo.view * glm::vec4(vertices[i].pos, 1.0f);
-            glm::vec3 ndc = glm::vec3(clipSpacePoint) / clipSpacePoint.w;
-
-            std::cout << "Vertice " << i << ": NDC: " << ndc.x << ", " << ndc.y << ", " << ndc.z << "\n";
-        }
-
-        // Imprime os valores para comparação
-        std::cout << std::fixed << std::setprecision(8);
-        std::cout << "Vertex Position: (" << vertex.x << ", " << vertex.y << ", " << vertex.z << ")\n";
-        std::cout << "view: " << view.x << ", " << view.y << ", " << view.z << ", " << view.w << "\n";
-        std::cout << "clip: " << clip.x << ", " << clip.y << ", " << clip.z << ", " << clip.w << "\n";
-        std::cout << "ndc: " << ndc.x << ", " << ndc.y << ", " << ndc.z << "\n";
-        std::cout << "Screen Coordinates: x = " << x << ", y = " << y << "\n";
-        std::cout << "Depth Value from Depth Buffer: " << depthValue << "\n\n";
-
+        //std::cout << "\n\n";
             /*if (std::abs(depthValue - ndc.z) < 0.001)
                 std::cout << "Point " << i << " is NOT occluded! " << std::abs(depthValue - ndc.z) << "\n\n";
             else
                 std::cout << "Point " << i << " is occluded! " << std::abs(depthValue - ndc.z) << "\n\n";
 
-            count++;
+            count++;*/
 
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
-        std::cout << "Execution time: " << elapsed.count() << " seconds, with " << count << " tests." << "\n\n";*/
+        std::cout << "Execution time Depth Algorithm: " << elapsed.count() << " seconds, with " << count << " tests." << "\n";
+
+        outputFile.close();
+        file_index++;
     }
 
     VkShaderModule createShaderModule(const std::vector<char>& code) {
@@ -2165,16 +2783,7 @@ private:
 
         bool extensionsSupported = checkDeviceExtensionSupport(device);
 
-        bool swapChainAdequate = false;
-        if (extensionsSupported) {
-            SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
-            swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
-        }
-
-        VkPhysicalDeviceFeatures supportedFeatures;
-        vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
-
-        return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
+        return indices.isComplete() && extensionsSupported;
     }
 
     bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
@@ -2204,10 +2813,12 @@ private:
 
         int i = 0;
         for (const auto& queueFamily : queueFamilies) {
+            // Verifica se esta fila suporta gráficos
             if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
                 indices.graphicsFamily = i;
             }
 
+            // Verifica se esta fila suporta apresentação
             VkBool32 presentSupport = false;
             vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
 
@@ -2215,6 +2826,12 @@ private:
                 indices.presentFamily = i;
             }
 
+            // Verifica se esta fila suporta computação
+            if (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT) {
+                indices.computeFamily = i;
+            }
+
+            // Verifica se encontramos todas as filas necessárias
             if (indices.isComplete()) {
                 break;
             }

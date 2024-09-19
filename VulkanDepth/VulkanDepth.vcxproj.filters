@@ -23,5 +23,6 @@
     <None Include="shaders\compile.bat">
       <Filter>Arquivos de Origem</Filter>
     </None>
+    <None Include="shaders\compute_shader.comp" />
   </ItemGroup>
 </Project>
