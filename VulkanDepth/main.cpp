@@ -26,6 +26,8 @@
 #include <array>
 #include <optional>
 #include <set>
+#include <thread>
+#include <mutex>
 
 #ifdef _WIN32
     #define popen _popen
@@ -539,7 +541,8 @@ private:
 
             //Take another patch of surface and update the buffers
             if (CURRENT_INDEX_SURFACE < N_SURFACES) {
-                //testSceneOccludedDirectAlgorithm();
+                testSceneOccludedDirectAlgorithm();
+                file_index++;
 
                 CURRENT_INDEX_SURFACE++;
                 std::string matlabOutputSurface = execMATLAB(matlabCommandSurfaceIndex(CURRENT_INDEX_SURFACE).c_str());
@@ -1382,7 +1385,7 @@ private:
 
     //Depth
     void createStagingBuffer(){
-        VkDeviceSize bufferSize = swapChainExtent.width * swapChainExtent.height * sizeof(float); //verify
+        VkDeviceSize bufferSize = swapChainExtent.width * swapChainExtent.height * sizeof(float);
 
         VkBufferCreateInfo bufferInfo = {};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1420,7 +1423,7 @@ private:
         VkFormat depthFormat = findDepthFormat();
         createImage(swapChainExtent.width, swapChainExtent.height, depthFormat,
             VK_IMAGE_TILING_OPTIMAL,
-            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             depthImage, depthImageMemory);
         depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
@@ -1482,7 +1485,7 @@ private:
     }
 
     void copyDepthBufferToStagingBuffer() {
-        // Create a fence to ensure that the GPU has finished before we proceed
+        // Create a fence to ensure GPU operations are complete before proceeding
         VkFence copyFence;
         VkFenceCreateInfo fenceInfo{};
         fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -1491,7 +1494,7 @@ private:
             throw std::runtime_error("failed to create fence!");
         }
 
-        // Manually allocate a command buffer for this operation
+        // Allocate a temporary command buffer for the copy operation
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -1501,52 +1504,44 @@ private:
         VkCommandBuffer commandBuffer;
         vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
 
+        // Begin recording commands
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-        if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-            throw std::runtime_error("failed to begin recording command buffer!");
-        }
+        vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
-        std::cout << "Transicao para TRANSFER_SRC_OPTIMAL" << std::endl;
-        // Transition the depth image layout to transfer src
-        transitionImageLayout(depthImage, VK_FORMAT_D32_SFLOAT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        // Transition the depth image layout to TRANSFER_SRC_OPTIMAL for copying
+        transitionImageLayoutCB(commandBuffer, depthImage, VK_FORMAT_D32_SFLOAT,
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
         // Copy the depth image to the staging buffer
         VkBufferImageCopy region{};
         region.bufferOffset = 0;
-        //region.bufferRowLength = 0;
-        //region.bufferImageHeight = 0;
         region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         region.imageSubresource.mipLevel = 0;
         region.imageSubresource.baseArrayLayer = 0;
         region.imageSubresource.layerCount = 1;
-        region.imageOffset = { 0, 0, 0 };
         region.imageExtent = { swapChainExtent.width, swapChainExtent.height, 1 };
-
 
         vkCmdCopyImageToBuffer(commandBuffer, depthImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, stagingBuffer, 1, &region);
 
-        std::cout << "Transicao para DEPTH_STENCIL_ATTACHMENT_OPTIMAL" << std::endl;
-        // Transition the depth image layout back to its original layout
-        transitionImageLayout(depthImage, VK_FORMAT_D32_SFLOAT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        // Transition the depth image layout back to DEPTH_STENCIL_ATTACHMENT_OPTIMAL for the next frame
+        transitionImageLayoutCB(commandBuffer, depthImage, VK_FORMAT_D32_SFLOAT,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-        if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-            throw std::runtime_error("failed to end recording command buffer!");
-        }
+        // End recording of the command buffer
+        vkEndCommandBuffer(commandBuffer);
 
-        // Submit the command buffer and wait for the fence
+        // Submit the command buffer and wait for it to finish
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
 
-        if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, copyFence) != VK_SUCCESS) {
-            throw std::runtime_error("failed to submit copy command buffer!");
-        }
-
-        // Wait for the fence to signal that the operations are complete
+        vkQueueSubmit(graphicsQueue, 1, &submitInfo, copyFence);
         vkWaitForFences(device, 1, &copyFence, VK_TRUE, UINT64_MAX);
 
         // Cleanup
@@ -1554,23 +1549,23 @@ private:
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     }
 
-    float getDepthValueAtCoord(int x, int y) {
-        void* data; //verify
+    float* mapStagingBuffer() {
+        void* data;
         vkMapMemory(device, stagingBufferMemory, 0, VK_WHOLE_SIZE, 0, &data);
-        float* depthValues = static_cast<float*>(data); //verify the type
+        return static_cast<float*>(data); // Return a pointer to the mapped memory
+    }
 
+    void unmapStagingBuffer() {
+        vkUnmapMemory(device, stagingBufferMemory);
+    }
+
+    float getDepthValueAtCoord(float* depthValues, int x, int y) {
         // Ensure x and y are within bounds
         if (x >= 0 && x < swapChainExtent.width && y >= 0 && y < swapChainExtent.height) {
             int index = y * swapChainExtent.width + x;
-            float depthValue = depthValues[index];
-            /*for (int i = 0; i < 200; i++) {
-                std::cout << depthValues[rand() % 600*600 - 1] << "\n";
-            }*/
-            vkUnmapMemory(device, stagingBufferMemory);
-            return depthValue;
+            return depthValues[index];
         }
         else {
-            vkUnmapMemory(device, stagingBufferMemory);
             return -1.0f; // Return an error value or handle this appropriately
         }
     }
@@ -1796,6 +1791,81 @@ private:
         );
 
         endSingleTimeCommands(commandBuffer);
+    }
+    
+    void transitionImageLayoutCB(VkCommandBuffer commandBuffer, VkImage image, VkFormat format,
+        VkImageLayout oldLayout, VkImageLayout newLayout) {
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = oldLayout;
+        barrier.newLayout = newLayout;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = image;
+
+        if (format == VK_FORMAT_D32_SFLOAT || format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            if (format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+                barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+            }
+        }
+        else {
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        }
+
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+
+        VkPipelineStageFlags sourceStage;
+        VkPipelineStageFlags destinationStage;
+
+        if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+            barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+
+        }else if (oldLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+            barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            sourceStage = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+            destinationStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+
+        }else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+
+        }else {
+            throw std::invalid_argument("Unsupported layout transition");
+        }
+
+        vkCmdPipelineBarrier(
+            commandBuffer,
+            sourceStage, destinationStage,
+            0,
+            0, nullptr,
+            0, nullptr,
+            1, &barrier
+        );
     }
 
     void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
@@ -2434,6 +2504,12 @@ private:
         UniformBufferObject ubo{};
         ubo = initUbo(ubo);
 
+        std::ofstream outputFile("output_occlusion/occlusion_output_direct_" + std::to_string(file_index) + ".txt");
+        if (!outputFile.is_open()) {
+            std::cerr << "Não foi possível abrir o arquivo para escrita!\n";
+            return;
+        }
+
         auto start = std::chrono::high_resolution_clock::now();
         std::vector<Vertex> transformed_vertices;
 
@@ -2450,6 +2526,8 @@ private:
         for (size_t i = 0; i < pointVertices.size(); ++i) {
             glm::vec3 model_point = pointVertices[i].pos;
             glm::vec3 ndc_point = clip_transformed_pointVertices[i].pos;
+            bool isOccluded = false;
+
             for (size_t j = 0; j < indices.size(); j += 3) {
                 int id0 = indices[j];
                 int id1 = indices[j + 1];
@@ -2463,7 +2541,11 @@ private:
                 glm::vec3 tr_v1 = transformed_vertices[id1].pos;
                 glm::vec3 tr_v2 = transformed_vertices[id2].pos;
 
-                bool isOccluded = isPointOccludedByTriangle(model_point, v0, v1, v2, ndc_point, tr_v0, tr_v1, tr_v2);
+                if (isPointOccludedByTriangle(model_point, v0, v1, v2, ndc_point, tr_v0, tr_v1, tr_v2)) {
+                    isOccluded = true;
+                    count++;
+                    break;
+                }
 
                 /*if (isOccluded) {
                     std::cout << "Point " << i << " is occluded by triangle (" << id0 << ", " << id1 << ", " << id2 << ")." << "\n";
@@ -2471,20 +2553,22 @@ private:
                 else {
                     std::cout << "Point " << i << " is NOT occluded by triangle (" << id0 << ", " << id1 << ", " << id2 << ")." << "\n";
                 }*/
-                count++;
             }
+            outputFile << (isOccluded ? 1 : 0) << "\n";
         }
 
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
         std::cout << "Execution time Direct Algorithm: " << elapsed.count() << " seconds, with " << count << " tests." << "\n\n";
+    
+        outputFile.close();
     }
 
     void drawFrame() {
-        // Esperar o frame anterior terminar
+        // Wait for the previous frame to finish
         vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
-        // Adquirir a próxima imagem da swap chain
+        // Acquire the next image from the swapchain
         uint32_t imageIndex;
         VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
@@ -2496,17 +2580,46 @@ private:
             throw std::runtime_error("failed to acquire swap chain image!");
         }
 
-        // Atualizar o uniform buffer para o frame atual
+        // Update the uniform buffer for the current frame
         updateUniformBuffer(currentFrame);
 
-        // Resetar o fence do frame atual
+        // Reset the fence for the current frame
         vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
-        // Resetar o command buffer e gravar novos comandos (renderização)
+        // Reset and record the command buffer for rendering
         vkResetCommandBuffer(commandBuffers[currentFrame], 0);
         recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
-        // Submeter o command buffer à fila gráfica
+        // Submit the command buffer to the graphics queue
+        submitGraphicsCommandBuffer();
+
+        // Wait for rendering to complete
+        vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+
+        // Copy the depth buffer to the staging buffer
+        copyDepthBufferToStagingBuffer();
+
+        // Run the compute shader to process occlusion and time it
+        auto computeStart = std::chrono::high_resolution_clock::now();
+        executeComputeShader();
+        auto computeEnd = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> computeElapsed = computeEnd - computeStart;
+        std::cout << "Execution time Z-Buffer Algorithm in compute shader: " << computeElapsed.count() << " seconds.\n";
+
+        // Print the occlusion results to a file from the compute shader
+        printOcclusionResultsFile(clip_transformed_pointVertices.size());
+
+        // Present the final image
+        presentImage(imageIndex);
+
+        // Optionally: Test depth occlusion (if needed)
+        testPointDepth();
+
+        // Update the current frame
+        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+    }
+
+    void submitGraphicsCommandBuffer() {
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
@@ -2526,24 +2639,51 @@ private:
         if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
             throw std::runtime_error("failed to submit draw command buffer!");
         }
+    }
 
-        // Esperar pela conclusão da renderização antes de copiar o depth buffer
-        vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+    void executeComputeShader() {
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        vkResetCommandBuffer(commandBuffers[currentFrame], 0);
+        vkBeginCommandBuffer(commandBuffers[currentFrame], &beginInfo);
 
-        // Copiar o depth buffer para o staging buffer
-        auto start = std::chrono::high_resolution_clock::now();
-        copyDepthBufferToStagingBuffer();
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = end - start;
-        std::cout << "Copying the depth buffer takes " << elapsed.count() << " seconds" << "\n";
+        // Transition depth buffer for compute shader
+        transitionImageLayoutCB(commandBuffers[currentFrame], depthImage, VK_FORMAT_D32_SFLOAT,
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-        // Executar o compute shader após a cópia do depth buffer
-        runComputeShader();  // Vamos implementar isso abaixo
+        // Dispatch compute shader
+        size_t numPoints = pointVertices.size();
+        int numWorkGroupsX = (numPoints + 63) / 64;
+        vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
+        vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeDescriptorSets[currentFrame], 0, nullptr);
+        vkCmdDispatch(commandBuffers[currentFrame], numWorkGroupsX, 1, 1);
 
-        // Apresentar a imagem na tela
+        // Transition depth buffer back for rendering
+        transitionImageLayoutCB(commandBuffers[currentFrame], depthImage, VK_FORMAT_D32_SFLOAT,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+        vkEndCommandBuffer(commandBuffers[currentFrame]);
+
+        VkSubmitInfo computeSubmitInfo{};
+        computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        computeSubmitInfo.commandBufferCount = 1;
+        computeSubmitInfo.pCommandBuffers = &commandBuffers[currentFrame];
+
+        if (vkQueueSubmit(computeQueue, 1, &computeSubmitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
+            throw std::runtime_error("failed to submit compute command buffer!");
+        }
+
+        // Wait for the compute shader to complete
+        vkQueueWaitIdle(computeQueue);
+    }
+
+    void presentImage(uint32_t imageIndex) {
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
         presentInfo.waitSemaphoreCount = 1;
+
+        // Use the semaphore that signals when rendering is finished
+        VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
         presentInfo.pWaitSemaphores = signalSemaphores;
 
         VkSwapchainKHR swapChains[] = { swapChain };
@@ -2551,8 +2691,7 @@ private:
         presentInfo.pSwapchains = swapChains;
         presentInfo.pImageIndices = &imageIndex;
 
-        result = vkQueuePresentKHR(presentQueue, &presentInfo);
-
+        VkResult result = vkQueuePresentKHR(presentQueue, &presentInfo);
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
             framebufferResized = false;
             recreateSwapChain();
@@ -2560,48 +2699,58 @@ private:
         else if (result != VK_SUCCESS) {
             throw std::runtime_error("failed to present swap chain image!");
         }
-
-        // Testar o ponto de profundidade, se necessário
-        testPointDepth();
-
-        // Atualizar o frame atual
-        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
-    void runComputeShader() {
-        // Resetar o command buffer de computação (se necessário)
-        vkResetCommandBuffer(computeCommandBuffers[currentFrame], 0);
-
-        // Começar a gravar no command buffer de computação
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
-        vkBeginCommandBuffer(computeCommandBuffers[currentFrame], &beginInfo);
-
-        // Vincular o pipeline de computação e os descriptor sets
-        vkCmdBindPipeline(computeCommandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
-        vkCmdBindDescriptorSets(computeCommandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeDescriptorSets[currentFrame], 0, nullptr);
-
-        size_t numPoints = pointVertices.size();
-        int numWorkGroupsX = (numPoints + 63) / 64;
-        int numWorkGroupsY = 1;
-
-        // Executar o compute shader
-        vkCmdDispatch(computeCommandBuffers[currentFrame], numWorkGroupsX, numWorkGroupsY, 1);
-
-        // Finalizar o command buffer de computação
-        vkEndCommandBuffer(computeCommandBuffers[currentFrame]);
-
-        // Submeter o command buffer de computação à fila de computação
-        VkSubmitInfo submitInfo{};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &computeCommandBuffers[currentFrame];
-
-        vkQueueSubmit(computeQueue, 1, &submitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(computeQueue);  // Espera a execução do compute shader finalizar
+    int* mapResultBuffer() {
+        void* data;
+        vkMapMemory(device, resultBufferMemory, 0, VK_WHOLE_SIZE, 0, &data);
+        return static_cast<int*>(data);  // Assuming int is used for occlusion results (0 or 1)
     }
 
+    void unmapResultBuffer() {
+        vkUnmapMemory(device, resultBufferMemory);
+    }
+
+    void printOcclusionResults(int numPoints) {
+        int* results = mapResultBuffer();
+        if (!results) {
+            std::cerr << "Failed to map result buffer!\n";
+            return;
+        }
+
+        for (int i = 0; i < numPoints; ++i) {
+            std::cout << "Point " << i << ": "<< results[i] << (results[i] == 1 ? "Occluded" : "Not Occluded") << "\n";
+        }
+
+        unmapResultBuffer();
+    }
+    
+    void printOcclusionResultsFile(int numPoints) {
+        // Map the results buffer (where the compute shader stored occlusion results)
+        void* data;
+        vkMapMemory(device, resultBufferMemory, 0, VK_WHOLE_SIZE, 0, &data);
+        int* occlusionResults = static_cast<int*>(data);
+
+        // Open a file to write the results
+        std::ofstream outputFile("output_occlusion/occlusion_output_compute_" + std::to_string(file_index) + ".txt");
+        if (!outputFile.is_open()) {
+            std::cerr << "Failed to open output file!\n";
+            vkUnmapMemory(device, resultBufferMemory);
+            return;
+        }
+
+        for (int i = 0; i < numPoints; i++) {
+            outputFile << occlusionResults[i] << "\n";
+        }
+
+        // Close the file
+        outputFile.close();
+
+        // Unmap the memory when done
+        vkUnmapMemory(device, resultBufferMemory);
+    }
+
+    //Z-buffer Algorithm
     void testPointDepth() {
         // Wait for rendering to complete before proceeding =================
         vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
@@ -2612,101 +2761,90 @@ private:
         std::cout << std::fixed << std::setprecision(10);
         int isOccluded = 0;
 
+        std::vector<int> occlusionResults(clip_transformed_pointVertices.size(), 0);
+
         //std::cout << currentFrame << "\n";
         std::ofstream outputFile("output_occlusion/occlusion_output_frame_" + std::to_string(file_index) + ".txt");
-
         if (!outputFile.is_open()) {
             std::cerr << "Não foi possível abrir o arquivo para escrita!\n";
             return;
         }
 
+        float* depthValues = mapStagingBuffer();
+        if (!depthValues) {
+            std::cerr << "Failed to map the staging buffer!\n";
+            return;
+        }
+
+        //WITHOUT PARALELIZATION
         auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < clip_transformed_pointVertices.size(); i++) {
             isOccluded = 0;
-            //glm::vec3 vertex = pointVertices[i].pos;
-
-            //// Transform the vertex position into clip space 
-            //glm::vec4 vertexPos = glm::vec4(vertex, 1.0f);
-
-            //glm::vec4 view = _ubo.view * _ubo.model * vertexPos;
-            //glm::vec4 clip = _ubo.proj * view;
-
-            //// Espaço de coordenadas normalizadas (NDC)
-            //glm::vec3 ndc = glm::vec3(clip) / clip.w;
-
-            //// Converte coordenadas NDC para coordenadas de tela (x e y, variando de -1 a 1)
-            //int x = static_cast<int>((ndc.x * 0.5f + 0.5f) * swapChainExtent.width);
-            //int y = static_cast<int>((ndc.y * 0.5f + 0.5f) * swapChainExtent.height);
-
-            
+  
             // Fetch the depth value at this screen position
-            float depthValue = getDepthValueAtCoord(static_cast<int>(clip_transformed_pointVertices[i].pos.x), static_cast<int>(clip_transformed_pointVertices[i].pos.y));
+            float depthValue = getDepthValueAtCoord(depthValues, 
+                static_cast<int>(clip_transformed_pointVertices[i].pos.x),
+                static_cast<int>(clip_transformed_pointVertices[i].pos.y));
 
             //std::cout << i << ": " << ndc.z - depthValue << "\n";
 
-            /*if (clip_transformed_pointVertices[i].pos.z - depthValue > 0.00002) {
+            if (clip_transformed_pointVertices[i].pos.z - depthValue > 0.00003) {
                 isOccluded = 1;
             }
 
-            outputFile << isOccluded << "\n";*/
-            //glm::mat4 MVP = _ubo.proj * _ubo.view * _ubo.model;
-
-            /*std::cout << "View Matriz:" << "\n";
-            for (int i = 0; i < 4; i++) {
-                for (int j = 0; j < 4; j++) {
-                    std::cout << _ubo.view[i][j] << " ";
-                }
-                std::cout << "\n\n";
-            }
-
-            std::cout << "Projection Matriz:" << "\n";
-            for (int i = 0; i < 4; i++) {
-                for (int j = 0; j < 4; j++) {
-                    std::cout << _ubo.proj[i][j] << " ";
-                }
-                std::cout << "\n\n";
-            }*/
-
-            /*std::cout << "MVP Matriz:" << "\n";
-            for (int i = 0; i < 4; i++) {
-                for (int j = 0; j < 4; j++) {
-                    std::cout << MVP[i][j] << " ";
-                }
-                std::cout << "\n\n";
-            }*/
-
-
-            /*for (size_t i = 0; i < vertices.size(); ++i) {
-                glm::vec4 clipSpacePoint = _ubo.proj * _ubo.view * glm::vec4(vertices[i].pos, 1.0f);
-                glm::vec3 ndc = glm::vec3(clipSpacePoint) / clipSpacePoint.w;
-
-                std::cout << "Vertice " << i << ": NDC: " << ndc.x << ", " << ndc.y << ", " << ndc.z << "\n";
-            }*/
-
-            // Imprime os valores para comparação
-            /*std::cout << std::fixed << std::setprecision(8);
-            std::cout << "Vertex Position: (" << vertex.x << ", " << vertex.y << ", " << vertex.z << ")\n";
-            std::cout << "view: " << view.x << ", " << view.y << ", " << view.z << ", " << view.w << "\n";
-            std::cout << "clip: " << clip.x << ", " << clip.y << ", " << clip.z << ", " << clip.w << "\n";
-            std::cout << "ndc: " << ndc.x << ", " << ndc.y << ", " << ndc.z << "\n";
-            std::cout << "Screen Coordinates: x = " << x << ", y = " << y << "\n";
-            std::cout << "Depth Value from Depth Buffer: " << depthValue << "\n\n";*/
+            //outputFile << isOccluded <<"\n";
+            occlusionResults[i] = isOccluded;
             count++;
         }
-        //std::cout << "\n\n";
-            /*if (std::abs(depthValue - ndc.z) < 0.001)
-                std::cout << "Point " << i << " is NOT occluded! " << std::abs(depthValue - ndc.z) << "\n\n";
-            else
-                std::cout << "Point " << i << " is occluded! " << std::abs(depthValue - ndc.z) << "\n\n";
 
-            count++;*/
+        //PARALELIZATION
+        // Get available hardware concurrency (number of cores/threads)
+        //int numThreads = std::thread::hardware_concurrency();
+        //int numPoints = clip_transformed_pointVertices.size();
+        //int chunkSize = numPoints / numThreads;
+
+        //// Parallel execution using threads
+        //auto processChunk = [&](int start, int end) {
+        //    for (int i = start; i < end; ++i) {
+        //        int x = static_cast<int>(clip_transformed_pointVertices[i].pos.x);
+        //        int y = static_cast<int>(clip_transformed_pointVertices[i].pos.y);
+        //        float depthValue = getDepthValueAtCoord(depthValues, x, y);
+
+        //        if (clip_transformed_pointVertices[i].pos.z - depthValue > 0.00001) {
+        //            occlusionResults[i] = 1;  // Occluded
+        //        }
+        //        else {
+        //            occlusionResults[i] = 0;  // Not occluded
+        //        }
+        //    }
+        //};
+
+        //// Launch threads to process each chunk of the points
+        //std::vector<std::thread> threads;
+        //auto start = std::chrono::high_resolution_clock::now();
+        //for (int i = 0; i < numThreads; ++i) {
+        //    int startIdx = i * chunkSize;
+        //    int endIdx = (i == numThreads - 1) ? numPoints : (i + 1) * chunkSize;  // Last thread handles the rest
+        //    threads.emplace_back(processChunk, startIdx, endIdx);
+        //}
+
+        //// Join all threads (wait for completion)
+        //for (auto& thread : threads) {
+        //    thread.join();
+        //}
 
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
-        std::cout << "Execution time Depth Algorithm: " << elapsed.count() << " seconds, with " << count << " tests." << "\n";
+        std::cout << "Execution time Z-Buffer Algorithm: " << elapsed.count() << " seconds for " << count << " tests.\n";
+
+        // Write occlusion results to the output file after ensuring all threads are done
+        for (const auto& result : occlusionResults) {
+            outputFile << result << "\n";
+        }
+
+        unmapStagingBuffer();
 
         outputFile.close();
-        file_index++;
     }
 
     std::pair<std::vector<Vertex>, std::vector<Vertex>> transformPoint(const std::vector<Vertex> pointCurve) {
@@ -2735,13 +2873,11 @@ private:
             glm::vec3 ndc = glm::vec3(clip) / clip.w;
 
             // Converte coordenadas NDC para coordenadas de tela (x e y, variando de -1 a 1)
-            int x = static_cast<int>((ndc.x * 0.5f + 0.5f) * swapChainExtent.width);
-            int y = static_cast<int>((ndc.y * 0.5f + 0.5f) * swapChainExtent.height);
+            float x = (ndc.x * 0.5f + 0.5f) * swapChainExtent.width;
+            float y = (ndc.y * 0.5f + 0.5f) * swapChainExtent.height;
 
             glm::vec3 clip_pos = glm::vec3(x, y, ndc.z);
             clip_curvas.push_back({ clip_pos, color, {0.0f, 0.0f} });
-            // Fetch the depth value at this screen position
-            //float depthValue = getDepthValueAtCoord(x, y);
         }
 
         return { model_curvas, clip_curvas };

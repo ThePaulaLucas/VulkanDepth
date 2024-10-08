@@ -37,7 +37,7 @@ void main() {
     float depthBufferValue = texture(depthImage, screenCoords).r;
 
     // Compara a profundidade do ponto transformado com o valor do depth buffer
-    if (ndc.z > depthBufferValue + 0.0001) {
+    if (ndc.z - depthBufferValue > 0.00003) {
         // O ponto está ocluído
         results[index] = 1;
     } else {
