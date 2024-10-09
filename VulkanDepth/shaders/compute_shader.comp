@@ -1,4 +1,5 @@
 #version 450
+#extension GL_EXT_debug_printf : enable
 
 layout(binding = 0) uniform UniformBufferObject {
     mat4 model;
@@ -16,32 +17,28 @@ layout(binding = 3) buffer OcclusionResults {
     int results[];  // Buffer que vai armazenar 1 (ocluído) ou 0 (não ocluído)
 };
 
-layout(local_size_x = 64) in;
+layout(local_size_x = 256) in;
 
 void main() {
     uint index = gl_GlobalInvocationID.x;  // Índice do ponto a ser processado
-
-    // Pega o ponto correspondente do buffer
     vec3 point = points[index];
 
-    // Transforma o ponto de modelo para clip space
     vec4 clipSpacePos = ubo.proj * ubo.view * ubo.model * vec4(point, 1.0);
-
-    // Converte para coordenadas normalizadas (NDC)
     vec3 ndc = clipSpacePos.xyz / clipSpacePos.w;
-
-    // Converte NDC para coordenadas de tela (0 a 1)
     vec2 screenCoords = ndc.xy * 0.5 + 0.5;
 
-    // Acessa o valor do depth buffer na posição de tela
+    // Mapeamento para coordenadas de tela
     float depthBufferValue = texture(depthImage, screenCoords).r;
 
-    // Compara a profundidade do ponto transformado com o valor do depth buffer
+    // Compare the transformed point's depth with the depth buffer value
     if (ndc.z - depthBufferValue > 0.00003) {
-        // O ponto está ocluído
-        results[index] = 1;
+        results[index] = 1;  // Point is occluded
     } else {
-        // O ponto não está ocluído
-        results[index] = 0;
+        results[index] = 0;  // Point is not occluded
+    }
+
+    if ( gl_GlobalInvocationID.x < 10) {
+        debugPrintfEXT("Index: %u, Point: (%f, %f, %f), NDC: (%f, %f, %f), ScreenCoords: (%f, %f), Depth: %f\n",
+                       index, point.x, point.y, point.z, ndc.x, ndc.y, ndc.z, screenCoords.x, screenCoords.y, depthBufferValue);
     }
 }

@@ -44,7 +44,8 @@ const std::vector<const char*> validationLayers = {
 };
 
 const std::vector<const char*> deviceExtensions = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME
 };
 
 #ifdef NDEBUG
@@ -362,8 +363,12 @@ bool isPointOccludedByTriangle(
 
     // Compute triangle normal in world space
     glm::vec3 edge1 = v1 - v0;
-    glm::vec3 edge2 = v2 - v2;
+    glm::vec3 edge2 = v2 - v0;
     glm::vec3 triangleNormal = glm::normalize(glm::cross(edge1, edge2));
+
+    if (glm::length(triangleNormal) < 1e-6f) {
+        return false;
+    }
 
     // Check if point is in front of or behind the triangle plane
     float distance = glm::dot(triangleNormal, point - v0);
@@ -385,6 +390,10 @@ bool isPointOccludedByTriangle(
         float wv = glm::dot(w, v);
 
         float denominator = uv * uv - uu * vv;
+
+        if (std::abs(denominator) < 1e-6f) {
+            return false;
+        }
 
         float s = (uv * wv - vv * wu) / denominator;
         float t = (uv * wu - uu * wv) / denominator;
@@ -669,50 +678,65 @@ private:
 
     void createInstance() {
         if (enableValidationLayers && !checkValidationLayerSupport()) {
-            throw std::runtime_error("validation layers requested, but not available!");
+            throw std::runtime_error("Validation layers requested, but not available!");
         }
 
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        appInfo.pApplicationName = "Hello Triangle";
+        appInfo.pApplicationName = "Vulkan Application";
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
         appInfo.pEngineName = "No Engine";
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.apiVersion = VK_API_VERSION_1_0;
+        appInfo.apiVersion = VK_API_VERSION_1_2;
 
         VkInstanceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         createInfo.pApplicationInfo = &appInfo;
 
         auto extensions = getRequiredExtensions();
+        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME); // Add debug utils extension
         createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
         createInfo.ppEnabledExtensionNames = extensions.data();
 
         VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+        VkValidationFeaturesEXT validationFeatures{};
         if (enableValidationLayers) {
             createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
             createInfo.ppEnabledLayerNames = validationLayers.data();
 
             populateDebugMessengerCreateInfo(debugCreateInfo);
-            createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
+
+            // Enable the debug printf extension
+            VkValidationFeatureEnableEXT enables[] = { VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT };
+            validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+            validationFeatures.enabledValidationFeatureCount = 1;
+            validationFeatures.pEnabledValidationFeatures = enables;
+
+            // Chain the validation features to the pNext of debugCreateInfo
+            debugCreateInfo.pNext = &validationFeatures;
+            createInfo.pNext = &debugCreateInfo;
         }
         else {
             createInfo.enabledLayerCount = 0;
-
             createInfo.pNext = nullptr;
         }
 
         if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create instance!");
+            throw std::runtime_error("Failed to create instance!");
         }
-
+        setupDebugMessenger();
     }
 
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
         createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-        createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-        createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+        createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |  // Added this line
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+        createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
         createInfo.pfnUserCallback = debugCallback;
     }
 
@@ -1238,7 +1262,7 @@ private:
         VkPipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         depthStencil.depthTestEnable = VK_TRUE;
-        depthStencil.depthWriteEnable = VK_TRUE;
+        depthStencil.depthWriteEnable = VK_FALSE; //VK_TRUE;
         depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
         depthStencil.depthBoundsTestEnable = VK_FALSE;
         depthStencil.stencilTestEnable = VK_FALSE;
@@ -1944,7 +1968,8 @@ private:
         memcpy(data, pointVertices.data(), (size_t)bufferSize);
         vkUnmapMemory(device, stagingBufferMemory);
 
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, pointVertexBuffer, pointVertexBufferMemory);
+        VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        createBuffer(bufferSize, usageFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, pointVertexBuffer, pointVertexBufferMemory);
 
         copyBuffer(stagingBuffer, pointVertexBuffer, bufferSize);
 
@@ -2027,6 +2052,7 @@ private:
     }
 
     void createDescriptorPool() {
+        constexpr uint32_t EXTRA_SETS = 10;  // Additional sets for safety
         std::array<VkDescriptorPoolSize, 3> poolSizes{};
 
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -2042,7 +2068,7 @@ private:
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = MAX_FRAMES_IN_FLIGHT * 2;  // Ajuste para comportar ambos os pipelines
+        poolInfo.maxSets = (MAX_FRAMES_IN_FLIGHT * 2) + EXTRA_SETS; // Ajuste para comportar ambos os pipelines
 
         if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor pool!");
@@ -2126,6 +2152,11 @@ private:
             depthImageInfo.imageView = depthImageView;
             depthImageInfo.sampler = depthSampler;
 
+            VkDescriptorBufferInfo resultsBufferInfo{};
+            resultsBufferInfo.buffer = resultBuffer;
+            resultsBufferInfo.offset = 0;
+            resultsBufferInfo.range = VK_WHOLE_SIZE;
+
             std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
 
             // Binding 0: Uniform Buffer (UBO)
@@ -2151,11 +2182,6 @@ private:
             descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             descriptorWrites[2].descriptorCount = 1;
             descriptorWrites[2].pImageInfo = &depthImageInfo;
-
-            VkDescriptorBufferInfo resultsBufferInfo{};
-            resultsBufferInfo.buffer = resultBuffer;
-            resultsBufferInfo.offset = 0;
-            resultsBufferInfo.range = VK_WHOLE_SIZE;
 
             descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[3].dstSet = computeDescriptorSets[i];
@@ -2519,8 +2545,13 @@ private:
             glm::vec4 transformed_pt = ubo.proj * ubo.view * ubo.model * pt;
             transformed_pt = transformed_pt / transformed_pt.w;
 
+            float x = (transformed_pt.x * 0.5f + 0.5f) * swapChainExtent.width;
+            float y = (transformed_pt.y * 0.5f + 0.5f) * swapChainExtent.height;
+
+            glm::vec3 screen_pos = glm::vec3(x, y, transformed_pt.z);
             glm::vec3 color = glm::vec3(1.0f, 0.5f, 0.0f);
-            transformed_vertices.push_back({ { transformed_pt.x, transformed_pt.y, transformed_pt.z }, color, { 0.0f, 0.0f } });
+
+            transformed_vertices.push_back({ screen_pos, color, {0.0f, 0.0f} });
         }
 
         for (size_t i = 0; i < pointVertices.size(); ++i) {
@@ -2541,9 +2572,9 @@ private:
                 glm::vec3 tr_v1 = transformed_vertices[id1].pos;
                 glm::vec3 tr_v2 = transformed_vertices[id2].pos;
 
+                count++;
                 if (isPointOccludedByTriangle(model_point, v0, v1, v2, ndc_point, tr_v0, tr_v1, tr_v2)) {
                     isOccluded = true;
-                    count++;
                     break;
                 }
 
@@ -2593,7 +2624,7 @@ private:
         // Submit the command buffer to the graphics queue
         submitGraphicsCommandBuffer();
 
-        // Wait for rendering to complete
+        // Wait for the graphics queue to finish rendering
         vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
         // Copy the depth buffer to the staging buffer
@@ -2618,6 +2649,7 @@ private:
         // Update the current frame
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
+
 
     void submitGraphicsCommandBuffer() {
         VkSubmitInfo submitInfo{};
@@ -2653,7 +2685,7 @@ private:
 
         // Dispatch compute shader
         size_t numPoints = pointVertices.size();
-        int numWorkGroupsX = (numPoints + 63) / 64;
+        int numWorkGroupsX = (numPoints + 255) / 256;
         vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
         vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeDescriptorSets[currentFrame], 0, nullptr);
         vkCmdDispatch(commandBuffers[currentFrame], numWorkGroupsX, 1, 1);
@@ -2788,7 +2820,7 @@ private:
 
             //std::cout << i << ": " << ndc.z - depthValue << "\n";
 
-            if (clip_transformed_pointVertices[i].pos.z - depthValue > 0.00003) {
+            if (clip_transformed_pointVertices[i].pos.z - depthValue > 0.000002) {
                 isOccluded = 1;
             }
 
