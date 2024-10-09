@@ -1,5 +1,7 @@
 #version 450
+#ifdef ENABLE_DEBUG_PRINTF
 #extension GL_EXT_debug_printf : enable
+#endif
 
 layout(binding = 0) uniform UniformBufferObject {
     mat4 model;
@@ -8,7 +10,7 @@ layout(binding = 0) uniform UniformBufferObject {
 } ubo;
 
 layout(binding = 1) buffer Points {
-    vec3 points[];  // Buffer com os pontos a serem testados
+    vec4 points[];  // Buffer com os pontos a serem testados
 };
 
 layout(binding = 2) uniform sampler2D depthImage;  // Depth buffer como textura 2D
@@ -17,11 +19,11 @@ layout(binding = 3) buffer OcclusionResults {
     int results[];  // Buffer que vai armazenar 1 (ocluído) ou 0 (não ocluído)
 };
 
-layout(local_size_x = 256) in;
+layout(local_size_x = 64) in;
 
 void main() {
     uint index = gl_GlobalInvocationID.x;  // Índice do ponto a ser processado
-    vec3 point = points[index];
+    vec3 point = points[index].xyz;
 
     vec4 clipSpacePos = ubo.proj * ubo.view * ubo.model * vec4(point, 1.0);
     vec3 ndc = clipSpacePos.xyz / clipSpacePos.w;
@@ -30,15 +32,19 @@ void main() {
     // Mapeamento para coordenadas de tela
     float depthBufferValue = texture(depthImage, screenCoords).r;
 
-    // Compare the transformed point's depth with the depth buffer value
-    if (ndc.z - depthBufferValue > 0.00003) {
-        results[index] = 1;  // Point is occluded
+    // Compara a profundidade do ponto transformado com o valor do depth buffer
+    float bias = 0.00001;
+    if (ndc.z - (depthBufferValue + bias) > 0.000003) {
+        // The point is occluded
+        results[index] = 1;
     } else {
-        results[index] = 0;  // Point is not occluded
+        results[index] = 0; // The point is not occluded
     }
 
-    if ( gl_GlobalInvocationID.x < 10) {
+    #ifdef ENABLE_DEBUG_PRINTF
+    if (gl_GlobalInvocationID.x < 10) {
         debugPrintfEXT("Index: %u, Point: (%f, %f, %f), NDC: (%f, %f, %f), ScreenCoords: (%f, %f), Depth: %f\n",
                        index, point.x, point.y, point.z, ndc.x, ndc.y, ndc.z, screenCoords.x, screenCoords.y, depthBufferValue);
     }
+    #endif
 }

@@ -23,10 +23,8 @@
     <None Include="shaders\compute_shader.comp" />
     <None Include="shaders\shader.frag" />
     <None Include="shaders\shader.vert" />
-  </ItemGroup>
-  <ItemGroup>
-    <Font Include="shaders\compile.bat">
+    <None Include="shaders\compile.bat">
       <Filter>Arquivos de Origem</Filter>
-    </Font>
+    </None>
   </ItemGroup>
 </Project>

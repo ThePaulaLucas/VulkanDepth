@@ -30,8 +30,8 @@
 #include <mutex>
 
 #ifdef _WIN32
-    #define popen _popen
-    #define pclose _pclose
+#define popen _popen
+#define pclose _pclose
 #endif
 
 const uint32_t WIDTH = 1600;
@@ -164,7 +164,7 @@ std::pair<std::vector<Vertex>, std::vector<Camera>> parseCurvesAndCameras(const 
     int countCameras = 0;
 
     // Identificador de seção
-    enum Section { NONE, CURVES, CAMERA_INTRINSICS, CAMERA_ROTATION, CAMERA_TRANSLATION, NUMBER_OF_SURFACES} section = NONE;
+    enum Section { NONE, CURVES, CAMERA_INTRINSICS, CAMERA_ROTATION, CAMERA_TRANSLATION, NUMBER_OF_SURFACES } section = NONE;
 
     int row = 0;
 
@@ -314,7 +314,7 @@ std::pair<std::vector<Vertex>, std::vector<uint16_t>> parseSurfaces(const std::s
     return { superficies, indices };
 }
 
-std::string matlabCommandCurveAndCamera = "matlab -batch \"cd('C:\\Users\\lucas\\Desktop\\LOFTING_ZICHANG\\Surface_by_Lofting_From_3D_Curves-main\\Surface_by_Lofting_From_3D_Curves-main'); run_loft;\""; // occlusion_consistency_check; run_loft
+std::string matlabCommandCurveAndCamera = "matlab -batch \"cd('C:\\Users\\lucas\\Desktop\\LOFTING_ZICHANG\\Surface_by_Lofting_From_3D_Curves-main\\Surface_by_Lofting_From_3D_Curves-main'); occlusion_consistency_check;\""; // occlusion_consistency_check; run_loft
 std::string matlabOutputCurveAndCamera = execMATLAB(matlabCommandCurveAndCamera.c_str());
 
 std::pair<std::vector<Vertex>, std::vector<Camera>> result = parseCurvesAndCameras(matlabOutputCurveAndCamera);
@@ -327,7 +327,7 @@ std::vector<Vertex> model_transformed_pointVertices;
 std::vector<Vertex> clip_transformed_pointVertices;
 
 std::string matlabCommandSurfaceIndex(int index) {
-    std::string matlabCommandSurfaceIndex ="matlab -batch \"cd('C:\\Users\\lucas\\Desktop\\LOFTING_ZICHANG\\Surface_by_Lofting_From_3D_Curves-main\\Surface_by_Lofting_From_3D_Curves-main'); surfaceIndex=" + std::to_string(index) + "; read_surfaces;\""; // occlusion_consistency_check; run_loft
+    std::string matlabCommandSurfaceIndex = "matlab -batch \"cd('C:\\Users\\lucas\\Desktop\\LOFTING_ZICHANG\\Surface_by_Lofting_From_3D_Curves-main\\Surface_by_Lofting_From_3D_Curves-main'); surfaceIndex=" + std::to_string(index) + "; read_surfaces;\""; // occlusion_consistency_check; run_loft
     return matlabCommandSurfaceIndex;
 }
 std::string matlabOutputSurface = execMATLAB(matlabCommandSurfaceIndex(CURRENT_INDEX_SURFACE).c_str());
@@ -448,7 +448,7 @@ private:
 
     VkImage depthImage;
     VkDeviceMemory depthImageMemory;
-    VkImageView depthImageView; 
+    VkImageView depthImageView;
     VkFormat depthFormat;
     VkSampler depthSampler;
 
@@ -468,6 +468,8 @@ private:
     VkDeviceMemory pointVertexBufferMemory;
     VkBuffer resultBuffer;
     VkDeviceMemory resultBufferMemory;
+    VkBuffer vec3Buffer;
+    VkDeviceMemory vec3BufferMemory;
 
     std::vector<VkBuffer> uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
@@ -530,6 +532,7 @@ private:
         createIndexBuffer();
         createPointVertexBuffer();
         createOccludedResultBuffer();
+        createVec3Buffer();
         createStagingBuffer();
         createUniformBuffers();
         createDescriptorPool();
@@ -937,7 +940,7 @@ private:
         dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-        std::array<VkAttachmentDescription, 2> attachments = {colorAttachment, depthAttachment };
+        std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1038,7 +1041,7 @@ private:
 
         // Binding 1: Buffer de Pontos
         VkDescriptorBufferInfo pointsBufferInfo{};
-        pointsBufferInfo.buffer = pointsBuffer;
+        pointsBufferInfo.buffer = vec3Buffer;
         pointsBufferInfo.offset = 0;
         pointsBufferInfo.range = VK_WHOLE_SIZE;
 
@@ -1408,7 +1411,7 @@ private:
     }
 
     //Depth
-    void createStagingBuffer(){
+    void createStagingBuffer() {
         VkDeviceSize bufferSize = swapChainExtent.width * swapChainExtent.height * sizeof(float);
 
         VkBufferCreateInfo bufferInfo = {};
@@ -1816,7 +1819,7 @@ private:
 
         endSingleTimeCommands(commandBuffer);
     }
-    
+
     void transitionImageLayoutCB(VkCommandBuffer commandBuffer, VkImage image, VkFormat format,
         VkImageLayout oldLayout, VkImageLayout newLayout) {
         VkImageMemoryBarrier barrier{};
@@ -1866,19 +1869,22 @@ private:
             sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 
-        }else if (oldLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
             barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
             barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
             sourceStage = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
             destinationStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 
-        }else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
             barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
             barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
             sourceStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
             destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 
-        }else {
+        }
+        else {
             throw std::invalid_argument("Unsupported layout transition");
         }
 
@@ -1919,64 +1925,69 @@ private:
     void createVertexBuffer() {
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        VkBuffer _stagingBuffer;
+        VkDeviceMemory _stagingBufferMemory;
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _stagingBuffer, _stagingBufferMemory);
 
         void* data;
-        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        vkMapMemory(device, _stagingBufferMemory, 0, bufferSize, 0, &data);
         memcpy(data, vertices.data(), (size_t)bufferSize);
-        vkUnmapMemory(device, stagingBufferMemory);
+        vkUnmapMemory(device, _stagingBufferMemory);
 
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
 
-        copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+        copyBuffer(_stagingBuffer, vertexBuffer, bufferSize);
 
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        vkFreeMemory(device, stagingBufferMemory, nullptr);
+        vkDestroyBuffer(device, _stagingBuffer, nullptr);
+        vkFreeMemory(device, _stagingBufferMemory, nullptr);
     }
 
     void createIndexBuffer() {
         VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        VkBuffer _stagingBuffer;
+        VkDeviceMemory _stagingBufferMemory;
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _stagingBuffer, _stagingBufferMemory);
 
         void* data;
-        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        vkMapMemory(device, _stagingBufferMemory, 0, bufferSize, 0, &data);
         memcpy(data, indices.data(), (size_t)bufferSize);
-        vkUnmapMemory(device, stagingBufferMemory);
+        vkUnmapMemory(device, _stagingBufferMemory);
 
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
 
-        copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+        copyBuffer(_stagingBuffer, indexBuffer, bufferSize);
 
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        vkFreeMemory(device, stagingBufferMemory, nullptr);
+        vkDestroyBuffer(device, _stagingBuffer, nullptr);
+        vkFreeMemory(device, _stagingBufferMemory, nullptr);
     }
 
     void createPointVertexBuffer() {
         VkDeviceSize bufferSize = sizeof(pointVertices[0]) * pointVertices.size();
 
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        VkBuffer _stagingBuffer;
+        VkDeviceMemory _stagingBufferMemory;
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _stagingBuffer, _stagingBufferMemory);
 
         void* data;
-        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        vkMapMemory(device, _stagingBufferMemory, 0, bufferSize, 0, &data);
         memcpy(data, pointVertices.data(), (size_t)bufferSize);
-        vkUnmapMemory(device, stagingBufferMemory);
+        vkUnmapMemory(device, _stagingBufferMemory);
 
-        VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        createBuffer(bufferSize, usageFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, pointVertexBuffer, pointVertexBufferMemory);
+        VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
-        copyBuffer(stagingBuffer, pointVertexBuffer, bufferSize);
+        createBuffer(bufferSize, usageFlags,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            pointVertexBuffer, pointVertexBufferMemory);
 
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        vkFreeMemory(device, stagingBufferMemory, nullptr);
+        copyBuffer(_stagingBuffer, pointVertexBuffer, bufferSize);
+
+        vkDestroyBuffer(device, _stagingBuffer, nullptr);
+        vkFreeMemory(device, _stagingBufferMemory, nullptr);
     }
-    
+
     void createOccludedResultBuffer() {
 
         VkDeviceSize bufferSize = sizeof(int) * pointVertices.size();  // Tamanho do buffer baseado no número de pontos
@@ -1988,53 +1999,98 @@ private:
             resultBufferMemory);
     }
 
+    void createVec3Buffer() {
+        VkDeviceSize bufferSize = sizeof(glm::vec4) * pointVertices.size();
+
+        // Create a staging buffer for the vec3 data
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(bufferSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuffer,
+            stagingBufferMemory);
+
+        // Map the staging buffer memory and copy the vec3 data
+        void* data;
+        VkResult result = vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        if (result != VK_SUCCESS) {
+            std::cerr << "Failed to map staging buffer memory. Error code: " << result << "\n";
+            return;
+        }
+
+        // Copy vec3 data from pointVertices
+        std::vector<glm::vec4> vec3Data;
+        vec3Data.reserve(pointVertices.size());
+        for (const auto& vertex : pointVertices) {
+            vec3Data.push_back(glm::vec4(vertex.pos.x, vertex.pos.y, vertex.pos.z, 0.0f));
+        }
+        memcpy(data, vec3Data.data(), static_cast<size_t>(bufferSize));
+
+        vkUnmapMemory(device, stagingBufferMemory);
+
+        // Create the actual buffer with device-local memory for the vec3 data
+        createBuffer(bufferSize,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            vec3Buffer,
+            vec3BufferMemory);
+
+        // Copy data from the staging buffer to the vec3 buffer
+        copyBuffer(stagingBuffer, vec3Buffer, bufferSize);
+
+        // Clean up the staging buffer
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingBufferMemory, nullptr);
+    }
+
     //Update Buffers
     void updateVertexBuffer() {
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
         // Criar staging buffer
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
+        VkBuffer _stagingBuffer;
+        VkDeviceMemory _stagingBufferMemory;
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuffer, stagingBufferMemory);
+            _stagingBuffer, _stagingBufferMemory);
 
         // Mapear a memória e copiar os novos dados de vértices para o staging buffer
         void* data;
-        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        vkMapMemory(device, _stagingBufferMemory, 0, bufferSize, 0, &data);
         memcpy(data, vertices.data(), (size_t)bufferSize);
-        vkUnmapMemory(device, stagingBufferMemory);
+        vkUnmapMemory(device, _stagingBufferMemory);
 
         // Copiar os dados do staging buffer para o buffer de vértices na GPU
-        copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+        copyBuffer(_stagingBuffer, vertexBuffer, bufferSize);
 
         // Destruir o staging buffer e liberar sua memória
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        vkFreeMemory(device, stagingBufferMemory, nullptr);
+        vkDestroyBuffer(device, _stagingBuffer, nullptr);
+        vkFreeMemory(device, _stagingBufferMemory, nullptr);
     }
 
     void updateIndexBuffer() {
         VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
         // Criar staging buffer
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
+        VkBuffer _stagingBuffer;
+        VkDeviceMemory _stagingBufferMemory;
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuffer, stagingBufferMemory);
+            _stagingBuffer, _stagingBufferMemory);
 
         // Mapear a memória e copiar os novos dados de índices para o staging buffer
         void* data;
-        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        vkMapMemory(device, _stagingBufferMemory, 0, bufferSize, 0, &data);
         memcpy(data, indices.data(), (size_t)bufferSize);
-        vkUnmapMemory(device, stagingBufferMemory);
+        vkUnmapMemory(device, _stagingBufferMemory);
 
         // Copiar os dados do staging buffer para o buffer de índices na GPU
-        copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+        copyBuffer(_stagingBuffer, indexBuffer, bufferSize);
 
         // Destruir o staging buffer e liberar sua memória
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        vkFreeMemory(device, stagingBufferMemory, nullptr);
+        vkDestroyBuffer(device, _stagingBuffer, nullptr);
+        vkFreeMemory(device, _stagingBufferMemory, nullptr);
     }
 
     void createUniformBuffers() {
@@ -2051,6 +2107,7 @@ private:
         }
     }
 
+    //Descriptor Sets
     void createDescriptorPool() {
         constexpr uint32_t EXTRA_SETS = 10;  // Additional sets for safety
         std::array<VkDescriptorPoolSize, 3> poolSizes{};
@@ -2142,10 +2199,10 @@ private:
             uboBufferInfo.offset = 0;
             uboBufferInfo.range = sizeof(UniformBufferObject);
 
-            VkDescriptorBufferInfo pointsBufferInfo{};
-            pointsBufferInfo.buffer = pointVertexBuffer;
-            pointsBufferInfo.offset = 0;
-            pointsBufferInfo.range = VK_WHOLE_SIZE;
+            VkDescriptorBufferInfo vec3BufferInfo{};
+            vec3BufferInfo.buffer = vec3Buffer;
+            vec3BufferInfo.offset = 0;
+            vec3BufferInfo.range = VK_WHOLE_SIZE;
 
             VkDescriptorImageInfo depthImageInfo{};
             depthImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -2170,10 +2227,10 @@ private:
             // Binding 1: Buffer de Pontos
             descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[1].dstSet = computeDescriptorSets[i];
-            descriptorWrites[1].dstBinding = 1;
+            descriptorWrites[1].dstBinding = 1;  // Update to the binding for vec3Buffer
             descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             descriptorWrites[1].descriptorCount = 1;
-            descriptorWrites[1].pBufferInfo = &pointsBufferInfo;
+            descriptorWrites[1].pBufferInfo = &vec3BufferInfo;
 
             // Binding 2: Depth Buffer
             descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -2262,7 +2319,7 @@ private:
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
         VkBufferCopy copyRegion{};
-        copyRegion.srcOffset = 0; 
+        copyRegion.srcOffset = 0;
         copyRegion.dstOffset = 0;
         copyRegion.size = size;
         vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
@@ -2397,19 +2454,20 @@ private:
         }
     }
 
+    //Uniform Buffer
     void updateUniformBuffer(uint32_t currentImage) {
-        static auto startTime = std::chrono::high_resolution_clock::now();
-
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
         UniformBufferObject ubo{};
         ubo = initUbo(ubo);
 
+        void* data;
+        vkMapMemory(device, uniformBuffersMemory[currentFrame], 0, sizeof(ubo), 0, &data);
+
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+        vkUnmapMemory(device, uniformBuffersMemory[currentFrame]);
     }
 
-    UniformBufferObject initUbo(UniformBufferObject ubo) {   
+    UniformBufferObject initUbo(UniformBufferObject ubo) {
         ubo.model = glm::mat4(1.0f);
         //ubo.model[1][1] *= -1;
 
@@ -2486,10 +2544,10 @@ private:
 
         // Montando a matriz de visão (R e t)
         /*ubo.view = glm::mat4(
-            glm::vec4(-R[0][0], -R[0][1], -R[0][2], 0.0f),  
-            glm::vec4(-R[1][0], -R[1][1], -R[1][2], 0.0f),  
-            glm::vec4(R[2][0], R[2][1], R[2][2], 0.0f), 
-            glm::vec4(t[0], t[1], t[2], 1.0f)            
+            glm::vec4(-R[0][0], -R[0][1], -R[0][2], 0.0f),
+            glm::vec4(-R[1][0], -R[1][1], -R[1][2], 0.0f),
+            glm::vec4(R[2][0], R[2][1], R[2][2], 0.0f),
+            glm::vec4(t[0], t[1], t[2], 1.0f)
         );*/
 
         glm::vec3 C_t = -glm::transpose(R) * firstCamera.T;
@@ -2513,8 +2571,8 @@ private:
 
         // Matriz de projeção
         ubo.proj = glm::mat4(
-            glm::vec4(2 * K[0][0]/width, 0.0f, 0.0f, 0.0f),
-            glm::vec4(0.0f, -2 * K[1][1]/height, 0.0f, 0.0f),
+            glm::vec4(2 * K[0][0] / width, 0.0f, 0.0f, 0.0f),
+            glm::vec4(0.0f, -2 * K[1][1] / height, 0.0f, 0.0f),
             glm::vec4(2 * K[2][0] / width - 1, 2 * K[2][1] / height - 1, zFar / (zNear - zFar), -1.0f),
             glm::vec4(0.0f, 0.0f, zFar * zNear / (zNear - zFar), 0.0f)
         );
@@ -2525,6 +2583,7 @@ private:
         return ubo;
     }
 
+    //Direct Algorithm
     void testSceneOccludedDirectAlgorithm() {
         int count = 0;
         UniformBufferObject ubo{};
@@ -2591,10 +2650,11 @@ private:
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
         std::cout << "Execution time Direct Algorithm: " << elapsed.count() << " seconds, with " << count << " tests." << "\n\n";
-    
+
         outputFile.close();
     }
 
+    //Draw
     void drawFrame() {
         // Wait for the previous frame to finish
         vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
@@ -2650,7 +2710,6 @@ private:
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
-
     void submitGraphicsCommandBuffer() {
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -2674,32 +2733,48 @@ private:
     }
 
     void executeComputeShader() {
+        // Update the descriptor set for the compute shader
+        updateComputeDescriptorSet(
+            computeDescriptorSets[currentFrame],
+            uniformBuffers[currentFrame],  // Uniform buffer
+            vec3Buffer,                   // The buffer for the points
+            depthImageView,               // The depth image view
+            depthSampler,                 // The sampler for the depth image
+            resultBuffer                  // The buffer for occlusion results
+        );
+
+        // Separate command buffer for compute shader
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        vkResetCommandBuffer(commandBuffers[currentFrame], 0);
-        vkBeginCommandBuffer(commandBuffers[currentFrame], &beginInfo);
 
-        // Transition depth buffer for compute shader
-        transitionImageLayoutCB(commandBuffers[currentFrame], depthImage, VK_FORMAT_D32_SFLOAT,
+        vkResetCommandBuffer(computeCommandBuffers[currentFrame], 0);
+        vkBeginCommandBuffer(computeCommandBuffers[currentFrame], &beginInfo);
+
+        // Transition depth buffer for compute shader usage
+        transitionImageLayoutCB(computeCommandBuffers[currentFrame], depthImage, VK_FORMAT_D32_SFLOAT,
             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-        // Dispatch compute shader
-        size_t numPoints = pointVertices.size();
-        int numWorkGroupsX = (numPoints + 255) / 256;
-        vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
-        vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeDescriptorSets[currentFrame], 0, nullptr);
-        vkCmdDispatch(commandBuffers[currentFrame], numWorkGroupsX, 1, 1);
+        // Bind the compute pipeline and descriptor set
+        vkCmdBindPipeline(computeCommandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
+        vkCmdBindDescriptorSets(computeCommandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeDescriptorSets[currentFrame], 0, nullptr);
 
-        // Transition depth buffer back for rendering
-        transitionImageLayoutCB(commandBuffers[currentFrame], depthImage, VK_FORMAT_D32_SFLOAT,
+        // Dispatch the compute shader
+        size_t numPoints = pointVertices.size();
+        int numWorkGroupsX = (numPoints + 63) / 64;  // Assuming a local size of 64
+        vkCmdDispatch(computeCommandBuffers[currentFrame], numWorkGroupsX, 1, 1);
+
+        // Transition depth buffer back to its original layout
+        transitionImageLayoutCB(computeCommandBuffers[currentFrame], depthImage, VK_FORMAT_D32_SFLOAT,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-        vkEndCommandBuffer(commandBuffers[currentFrame]);
+        // End recording the command buffer
+        vkEndCommandBuffer(computeCommandBuffers[currentFrame]);
 
+        // Submit the compute command buffer
         VkSubmitInfo computeSubmitInfo{};
         computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         computeSubmitInfo.commandBufferCount = 1;
-        computeSubmitInfo.pCommandBuffers = &commandBuffers[currentFrame];
+        computeSubmitInfo.pCommandBuffers = &computeCommandBuffers[currentFrame];
 
         if (vkQueueSubmit(computeQueue, 1, &computeSubmitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
             throw std::runtime_error("failed to submit compute command buffer!");
@@ -2751,12 +2826,12 @@ private:
         }
 
         for (int i = 0; i < numPoints; ++i) {
-            std::cout << "Point " << i << ": "<< results[i] << (results[i] == 1 ? "Occluded" : "Not Occluded") << "\n";
+            std::cout << "Point " << i << ": " << results[i] << (results[i] == 1 ? "Occluded" : "Not Occluded") << "\n";
         }
 
         unmapResultBuffer();
     }
-    
+
     void printOcclusionResultsFile(int numPoints) {
         // Map the results buffer (where the compute shader stored occlusion results)
         void* data;
@@ -2812,15 +2887,20 @@ private:
         auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < clip_transformed_pointVertices.size(); i++) {
             isOccluded = 0;
-  
+
+            /*if (i < 10) {
+                std::cout << pointVertices[i].pos.x << " " << pointVertices[i].pos.y << " " << pointVertices[i].pos.z << "\n";
+                std::cout << clip_transformed_pointVertices[i].pos.x << " " << clip_transformed_pointVertices[i].pos.y << " " << clip_transformed_pointVertices[i].pos.z << "\n";
+            }*/
+
             // Fetch the depth value at this screen position
-            float depthValue = getDepthValueAtCoord(depthValues, 
+            float depthValue = getDepthValueAtCoord(depthValues,
                 static_cast<int>(clip_transformed_pointVertices[i].pos.x),
                 static_cast<int>(clip_transformed_pointVertices[i].pos.y));
 
             //std::cout << i << ": " << ndc.z - depthValue << "\n";
-
-            if (clip_transformed_pointVertices[i].pos.z - depthValue > 0.000002) {
+            float bias = 0.00001;
+            if (clip_transformed_pointVertices[i].pos.z - (depthValue + bias) > 0.000003) {
                 isOccluded = 1;
             }
 

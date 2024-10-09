@@ -74,21 +74,25 @@
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>C:\VulkanSDK\1.3.280.0\Include;$(IncludePath)</IncludePath>
     <LibraryPath>C:\VulkanSDK\1.3.280.0\Lib;$(LibraryPath)</LibraryPath>
+    <CustomBuildBeforeTargets />
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>C:\VulkanSDK\1.3.280.0\Include;$(IncludePath)</IncludePath>
     <LibraryPath>C:\VulkanSDK\1.3.280.0\Lib;$(LibraryPath)</LibraryPath>
+    <CustomBuildBeforeTargets />
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>C:\VulkanSDK\1.3.280.0\Include;$(IncludePath)</IncludePath>
     <LibraryPath>C:\VulkanSDK\1.3.280.0\Lib;$(LibraryPath)</LibraryPath>
+    <CustomBuildBeforeTargets />
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>C:\VulkanSDK\1.3.280.0\Include;$(IncludePath)</IncludePath>
     <LibraryPath>C:\VulkanSDK\1.3.280.0\Lib;$(LibraryPath)</LibraryPath>
+    <CustomBuildBeforeTargets />
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -105,6 +109,9 @@
       <AdditionalLibraryDirectories>C:\VulkanSDK\1.3.280.0\Lib;C:\Program Files %28x86%29\Microsoft Visual Studio\2019\Community\Libraries\glfw-3.4.bin.WIN64\lib-vc2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <CustomBuildStep>
+      <Command>call "$(ProjectDir)\shaders\ompile.bat"</Command>
+    </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -125,6 +132,9 @@
       <AdditionalLibraryDirectories>C:\VulkanSDK\1.3.280.0\Lib;C:\Program Files %28x86%29\Microsoft Visual Studio\2019\Community\Libraries\glfw-3.4.bin.WIN64\lib-vc2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <CustomBuildStep>
+      <Command>call "$(ProjectDir)\shaders\ompile.bat"</Command>
+    </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -141,6 +151,9 @@
       <AdditionalLibraryDirectories>C:\VulkanSDK\1.3.280.0\Lib;C:\Program Files %28x86%29\Microsoft Visual Studio\2019\Community\Libraries\glfw-3.4.bin.WIN64\lib-vc2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <CustomBuildStep>
+      <Command>call "$(ProjectDir)\shaders\ompile.bat"</Command>
+    </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -161,12 +174,15 @@
       <AdditionalLibraryDirectories>C:\VulkanSDK\1.3.280.0\Lib;C:\Program Files %28x86%29\Microsoft Visual Studio\2019\Community\Libraries\glfw-3.4.bin.WIN64\lib-vc2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <CustomBuildStep>
+      <Command>call "$(ProjectDir)\shaders\ompile.bat"</Command>
+    </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <Font Include="shaders\compile.bat">
+    <None Include="shaders\compile.bat">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
       <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</DeploymentContent>
       <FileType>Document</FileType>
@@ -176,7 +192,7 @@
       <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DeploymentContent>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
       <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</DeploymentContent>
-    </Font>
+    </None>
     <None Include="shaders\compute_shader.comp" />
     <None Include="shaders\shader.frag" />
     <None Include="shaders\shader.vert" />
