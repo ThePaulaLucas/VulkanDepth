@@ -26,5 +26,7 @@
     <None Include="shaders\compile.bat">
       <Filter>Arquivos de Origem</Filter>
     </None>
+    <None Include="performance\performance_log_400k.csv" />
+    <None Include="performance_log.csv" />
   </ItemGroup>
 </Project>

@@ -1,4 +1,5 @@
 #version 450
+
 #ifdef ENABLE_DEBUG_PRINTF
 #extension GL_EXT_debug_printf : enable
 #endif
@@ -33,13 +34,16 @@ void main() {
     float depthBufferValue = texture(depthImage, screenCoords).r;
 
     // Compara a profundidade do ponto transformado com o valor do depth buffer
-    float bias = 0.00001;
-    if (ndc.z - (depthBufferValue + bias) > 0.000003) {
-        // The point is occluded
-        results[index] = 1;
-    } else {
-        results[index] = 0; // The point is not occluded
-    }
+    //float bias = 0.00001;
+    //if (ndc.z - (depthBufferValue + bias) > 0.000003) {
+        //The point is occluded
+        //results[index] = 1;
+    //} else {
+        //results[index] = 0;
+    //}
+    //results[index] = int(step(depthBufferValue + bias + 0.000003, ndc.z));
+    float adjustedDepth = depthBufferValue + 0.00001;
+    results[index] = int(ndc.z > adjustedDepth + 0.000003);
 
     #ifdef ENABLE_DEBUG_PRINTF
     if (gl_GlobalInvocationID.x < 10) {

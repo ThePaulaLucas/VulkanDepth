@@ -80,7 +80,6 @@ struct QueueFamilyIndices {
         return graphicsFamily.has_value() && presentFamily.has_value() && computeFamily.has_value();
     }
 };
-
 struct SwapChainSupportDetails {
     VkSurfaceCapabilitiesKHR capabilities;
     std::vector<VkSurfaceFormatKHR> formats;
@@ -136,7 +135,7 @@ struct UniformBufferObject {
 };
 
 int N_SURFACES;
-int CURRENT_INDEX_SURFACE = 1;
+int CURRENT_INDEX_SURFACE = 0;
 
 // Função para executar o script MATLAB e capturar a saída
 std::string execMATLAB(const char* cmd) {
@@ -257,63 +256,6 @@ std::pair<std::vector<Vertex>, std::vector<Camera>> parseCurvesAndCameras(const 
     return { curvas, cameras };
 }
 
-std::pair<std::vector<Vertex>, std::vector<uint16_t>> parseSurfaces(const std::string& matlabOutput) {
-    std::vector<Vertex> superficies;
-    std::vector<uint16_t> indices;
-    std::istringstream iss(matlabOutput);
-    std::string line;
-    float x, y, z;
-    int idx1, idx2, idx3; // 'ignore' será usado para capturar o valor "3"
-
-    glm::vec3 color = glm::vec3(0.0f, 1.0f, 0.0f);  // Cor padrão para superfícies
-
-    bool parsingPoints = false;
-    bool parsingTriangles = false;
-
-    std::cout << "Iniciando parsing de superficies...\n";
-
-    while (std::getline(iss, line)) {
-        std::istringstream pointStream(line);
-
-        // Verificar se estamos começando a processar pontos de superfície
-        if (line.find("Surface points") != std::string::npos) {
-            parsingPoints = true;
-            parsingTriangles = false;
-            continue;
-        }
-
-        // Verificar se estamos começando a processar triângulos de superfície
-        if (line.find("Surface triangles") != std::string::npos) {
-            parsingPoints = false;
-            parsingTriangles = true;
-            continue;
-        }
-
-        // Processar pontos de superfície
-        if (parsingPoints) {
-            if (pointStream >> x >> y >> z) {
-                //std::cout << x << " " << y << " " << z << "\n";
-                superficies.push_back({ {x, y, z}, color, {0.0f, 0.0f} });
-            }
-        }
-
-        // Processar triângulos de superfície
-        if (parsingTriangles) {
-            if (pointStream >> idx1 >> idx2 >> idx3) {
-                //std::cout << idx1 << " " << idx2 << " " << idx3 << "\n";
-                indices.push_back(idx1);
-                indices.push_back(idx2);
-                indices.push_back(idx3);
-            }
-        }
-    }
-
-    std::cout << "Parsing finalizado. Total de pontos de superficie: " << superficies.size() << "\n";
-    std::cout << "Total de triangulos: " << indices.size() / 3 << "\n";
-
-    return { superficies, indices };
-}
-
 std::string matlabCommandCurveAndCamera = "matlab -batch \"cd('C:\\Users\\lucas\\Desktop\\LOFTING_ZICHANG\\Surface_by_Lofting_From_3D_Curves-main\\Surface_by_Lofting_From_3D_Curves-main'); occlusion_consistency_check;\""; // occlusion_consistency_check; run_loft
 std::string matlabOutputCurveAndCamera = execMATLAB(matlabCommandCurveAndCamera.c_str());
 
@@ -326,16 +268,116 @@ std::vector<Camera> cameras = result.second;
 std::vector<Vertex> model_transformed_pointVertices;
 std::vector<Vertex> clip_transformed_pointVertices;
 
-std::string matlabCommandSurfaceIndex(int index) {
-    std::string matlabCommandSurfaceIndex = "matlab -batch \"cd('C:\\Users\\lucas\\Desktop\\LOFTING_ZICHANG\\Surface_by_Lofting_From_3D_Curves-main\\Surface_by_Lofting_From_3D_Curves-main'); surfaceIndex=" + std::to_string(index) + "; read_surfaces;\""; // occlusion_consistency_check; run_loft
+std::vector<std::pair<std::vector<Vertex>, std::vector<uint16_t>>> parseAllSurfaces(const std::string& matlabOutput) {
+    std::vector<std::pair<std::vector<Vertex>, std::vector<uint16_t>>> surfaces;
+    std::istringstream iss(matlabOutput);
+    std::string line;
+    float x, y, z;
+    int idx1, idx2, idx3;
+
+    glm::vec3 color = glm::vec3(0.0f, 1.0f, 0.0f);  // Cor padrão para superfícies
+
+    std::vector<Vertex> currentVertices;
+    std::vector<uint16_t> currentIndices;
+
+    bool parsingPoints = false;
+    bool parsingTriangles = false;
+    bool isFirstSurface = true;  // Flag para identificar a primeira superfície
+
+    while (std::getline(iss, line)) {
+        std::istringstream pointStream(line);
+
+        // Detectar o início de uma nova superfície
+        if (line.find("NOVA SUPERFICIE") != std::string::npos) {
+            // Para a primeira superfície, não há necessidade de salvar ainda
+            if (!isFirstSurface) {
+                // Armazenar a superfície anterior antes de começar uma nova
+                if (!currentVertices.empty() || !currentIndices.empty()) {
+                    surfaces.push_back({ currentVertices, currentIndices });
+                    currentVertices.clear();
+                    currentIndices.clear();
+                }
+            }
+            isFirstSurface = false;  // Após a primeira ocorrência, considerar outras superfícies
+            continue; // Ignorar a linha "NOVA SUPERFICIE"
+        }
+
+        // Detectar início dos pontos de superfície
+        if (line.find("Points:") != std::string::npos) {
+            parsingPoints = true;
+            parsingTriangles = false;
+            continue;
+        }
+
+        // Detectar início dos triângulos de superfície
+        if (line.find("Triangles:") != std::string::npos) {
+            parsingPoints = false;
+            parsingTriangles = true;
+            continue;
+        }
+
+        // Processar pontos de superfície
+        if (parsingPoints) {
+            if (pointStream >> x >> y >> z) {
+                currentVertices.push_back({ {x, y, z}, color, {0.0f, 0.0f} });
+            }
+        }
+
+        // Processar triângulos de superfície
+        if (parsingTriangles) {
+            if (pointStream >> idx1 >> idx2 >> idx3) {
+                currentIndices.push_back(static_cast<uint16_t>(idx1));
+                currentIndices.push_back(static_cast<uint16_t>(idx2));
+                currentIndices.push_back(static_cast<uint16_t>(idx3));
+            }
+        }
+    }
+
+    // Adicionar a última superfície processada, incluindo a primeira
+    if (!currentVertices.empty() || !currentIndices.empty()) {
+        surfaces.push_back({ currentVertices, currentIndices });
+    }
+
+    return surfaces;
+}
+
+std::string matlabCommandSurfaceIndex() {
+    std::string matlabCommandSurfaceIndex = "matlab -batch \"cd('C:\\Users\\lucas\\Desktop\\LOFTING_ZICHANG\\Surface_by_Lofting_From_3D_Curves-main\\Surface_by_Lofting_From_3D_Curves-main'); read_surfaces;\""; // occlusion_consistency_check; run_loft
     return matlabCommandSurfaceIndex;
 }
-std::string matlabOutputSurface = execMATLAB(matlabCommandSurfaceIndex(CURRENT_INDEX_SURFACE).c_str());
-std::pair<std::vector<Vertex>, std::vector<uint16_t>> resultSurf = parseSurfaces(matlabOutputSurface);
+std::string matlabOutputSurface = execMATLAB(matlabCommandSurfaceIndex().c_str());
+auto resultSurf = parseAllSurfaces(matlabOutputSurface);
 
 //Buffer that stores surfaces vertex
-std::vector<Vertex> vertices = resultSurf.first;
-std::vector<uint16_t> indices = resultSurf.second;
+std::vector<Vertex> vertices = resultSurf[CURRENT_INDEX_SURFACE].first;
+std::vector<uint16_t> indices = resultSurf[CURRENT_INDEX_SURFACE].second;
+
+// Inicializa o arquivo CSV para os dados de performance
+std::string performanceLogFile = "performance_log.csv";
+void initializePerformanceLog(const std::string& filename) {
+    std::ofstream file(filename, std::ios::out);
+
+    if (file.is_open()) {
+        // Escreve o cabeçalho com uma coluna extra para o método
+        file << "SurfaceIndex,Method,ExecutionTime,numberPoints\n";
+        file.close();
+    }
+    else {
+        std::cerr << "Erro ao criar o arquivo de log de performance!\n";
+    }
+}
+
+void logPerformanceData(const std::string& filename, int surfaceIndex, const std::string& method, double executionTime, int num_points) {
+    std::ofstream file(filename, std::ios::out | std::ios::app);
+
+    if (file.is_open()) {
+        file << surfaceIndex << "," << method << "," << executionTime << "," << num_points << "\n";
+        file.close();
+    }
+    else {
+        std::cerr << "Erro ao escrever no arquivo de log de performance!\n";
+    }
+}
 
 void printMatrix(const glm::mat3& matrix, const std::string& name) {
     std::cout << name << ":\n";
@@ -543,6 +585,8 @@ private:
     }
 
     void mainLoop() {
+        initializePerformanceLog(performanceLogFile);
+
         std::pair<std::vector<Vertex>, std::vector<Vertex>> transformed_points = transformPoint(pointVertices);
         model_transformed_pointVertices = transformed_points.first;
         clip_transformed_pointVertices = transformed_points.second;
@@ -557,18 +601,16 @@ private:
                 file_index++;
 
                 CURRENT_INDEX_SURFACE++;
-                std::string matlabOutputSurface = execMATLAB(matlabCommandSurfaceIndex(CURRENT_INDEX_SURFACE).c_str());
-                std::pair<std::vector<Vertex>, std::vector<uint16_t>> resultSurf = parseSurfaces(matlabOutputSurface);
 
                 //Buffer that stores surfaces vertex
-                vertices = resultSurf.first;
-                indices = resultSurf.second;
+                vertices.clear();
+                indices.clear();
+
+                vertices = resultSurf[CURRENT_INDEX_SURFACE].first;
+                indices = resultSurf[CURRENT_INDEX_SURFACE].second;
 
                 updateVertexBuffer();
                 updateIndexBuffer();
-                //std::cout << vertices[1].pos.x << "\n";
-                //std::cout << vertices.size() << "\n";
-                //std::cout << CURRENT_INDEX_SURFACE << "\n";
             }
         }
 
@@ -2650,6 +2692,8 @@ private:
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
         std::cout << "Execution time Direct Algorithm: " << elapsed.count() << " seconds, with " << count << " tests." << "\n\n";
+        
+        logPerformanceData(performanceLogFile, CURRENT_INDEX_SURFACE, "Direct Method", elapsed.count(), pointVertices.size());
 
         outputFile.close();
     }
@@ -2696,6 +2740,8 @@ private:
         auto computeEnd = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> computeElapsed = computeEnd - computeStart;
         std::cout << "Execution time Z-Buffer Algorithm in compute shader: " << computeElapsed.count() << " seconds.\n";
+        logPerformanceData(performanceLogFile, CURRENT_INDEX_SURFACE, "Compute Shader Z-Buffer", computeElapsed.count(), pointVertices.size());
+
 
         // Print the occlusion results to a file from the compute shader
         printOcclusionResultsFile(clip_transformed_pointVertices.size());
@@ -2948,6 +2994,7 @@ private:
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end - start;
         std::cout << "Execution time Z-Buffer Algorithm: " << elapsed.count() << " seconds for " << count << " tests.\n";
+        logPerformanceData(performanceLogFile, CURRENT_INDEX_SURFACE, "Z-Buffer", elapsed.count(), pointVertices.size());
 
         // Write occlusion results to the output file after ensuring all threads are done
         for (const auto& result : occlusionResults) {
