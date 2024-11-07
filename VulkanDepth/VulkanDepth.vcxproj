@@ -180,6 +180,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="PointDebug\debug.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="performance\performance_log_400k.csv" />
